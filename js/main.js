@@ -78,6 +78,9 @@ const occlusionPoint = new THREE.Vector3();
 const cinematicBox = new THREE.Box3();
 const cinematicSize = new THREE.Vector3();
 const cinematicCenter = new THREE.Vector3();
+const cinematicSafeEnd = new THREE.Vector3();
+const cinematicCandidate = new THREE.Vector3();
+const cinematicSide = new THREE.Vector3();
 
 const clock = new THREE.Clock();
 
@@ -479,7 +482,7 @@ function showSalaryToast(amount) {
     }, 2800);
 }
 
-function handleDreamFurnitureChanged() {
+function handleDreamFurnitureChanged(options = {}) {
     if (controlsModule) {
         controlsModule.setColliders(getActivePlayerColliders());
     }
@@ -488,14 +491,16 @@ function handleDreamFurnitureChanged() {
             roomId: 'dream',
             bounds: dreamRoomBounds,
             waypoints: [...dreamRoomWaypoints, ...getDreamFurnitureWaypoints()],
-            colliders: getActiveDreamCharacterColliders()
+            colliders: getActiveDreamCharacterColliders(),
+            forceRepath: Boolean(options.forceCharacterRepath)
         });
     } else if (charData && currentPlayerRoomId === 'bedroom') {
         refreshCharacterNavigationData(charData, {
             roomId: 'bedroom',
             bounds: oldRoomBounds,
             waypoints: charData.originalBedroomWaypoints || charData.waypoints || [],
-            colliders: getActiveBedroomCharacterColliders()
+            colliders: getActiveBedroomCharacterColliders(),
+            forceRepath: Boolean(options.forceCharacterRepath)
         });
     }
 }
@@ -553,6 +558,54 @@ function clampCameraToDreamRoom(pos, margin = 0.42) {
     return pos;
 }
 
+function isCameraPointBlocked(pos, radius = 0.28) {
+    const colliders = getActivePlayerColliders();
+    for (const box of colliders) {
+        if (pos.x + radius > box.min.x && pos.x - radius < box.max.x
+            && pos.z + radius > box.min.z && pos.z - radius < box.max.z
+            && pos.y > box.min.y && 0 < box.max.y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function findSafeDreamCinematicEnd(preferredEnd, target, viewDir, maxSize) {
+    const playerY = Number.isFinite(camera?.position?.y) ? camera.position.y : 1.6;
+    const fallbackDistance = THREE.MathUtils.clamp(maxSize * 1.8 + 1.25, 2.4, 5.4);
+    const forward = cinematicCandidate.copy(viewDir);
+    if (forward.lengthSq() < 0.0001) forward.set(0, 0, 1);
+    forward.y = 0;
+    forward.normalize();
+    cinematicSide.set(-forward.z, 0, forward.x);
+
+    const candidates = [preferredEnd.clone()];
+    for (const distanceScale of [1, 0.82, 1.18, 0.64, 1.36]) {
+        const baseDistance = fallbackDistance * distanceScale;
+        for (const sideOffset of [0, 0.55, -0.55, 1.0, -1.0, 1.45, -1.45]) {
+            const candidate = target.clone()
+                .addScaledVector(forward, baseDistance)
+                .addScaledVector(cinematicSide, sideOffset);
+            candidate.y = playerY;
+            candidates.push(candidate);
+        }
+    }
+
+    for (const candidate of candidates) {
+        candidate.y = playerY;
+        clampCameraToDreamRoom(candidate);
+        candidate.y = playerY;
+        if (!isCameraPointBlocked(candidate)) {
+            return candidate.clone();
+        }
+    }
+
+    const fallback = preferredEnd.clone();
+    fallback.y = playerY;
+    clampCameraToDreamRoom(fallback);
+    return fallback;
+}
+
 function startDreamFurnitureCinematic(record, runtimeItem) {
     const group = runtimeItem?.group;
     if (!group || !camera || !controlsModule) return;
@@ -573,6 +626,8 @@ function startDreamFurnitureCinematic(record, runtimeItem) {
     const end = target.clone().addScaledVector(front, endDistance).add(new THREE.Vector3(0, Math.min(1.0, maxSize * 0.28 + 0.35), 0));
     clampCameraToDreamRoom(start);
     clampCameraToDreamRoom(end);
+    cinematicSafeEnd.copy(findSafeDreamCinematicEnd(end, target, front, maxSize));
+    end.copy(cinematicSafeEnd);
 
     dreamCinematic = {
         recordId: record?.id || '',
@@ -603,9 +658,14 @@ function skipDreamFurnitureCinematic() {
 
 function finishDreamFurnitureCinematic() {
     if (!dreamCinematic) return;
+    if (camera && dreamCinematic.end) {
+        camera.position.copy(dreamCinematic.end);
+        camera.lookAt(dreamCinematic.targetEnd || lookTarget);
+    }
     dreamCinematic = null;
     controlsModule?.setMovementLocked?.(false);
-    controlsModule?.enterControlMode?.();
+    controlsModule?.resolveCameraCollisions?.();
+    controlsModule?.forceEnterControlMode?.();
     const prompt = document.getElementById('interaction-prompt');
     if (prompt) prompt.classList.add('hidden');
 }

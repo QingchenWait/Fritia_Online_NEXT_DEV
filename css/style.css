@@ -894,6 +894,8 @@ body {
     padding: 32px;
     width: 400px;
     max-width: 90vw;
+    max-height: 86vh;
+    overflow-y: auto;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
@@ -1733,9 +1735,18 @@ body {
     backdrop-filter: blur(5px);
 }
 
+#dream-terminal-panel {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
 .dream-shell {
     width: min(1040px, 94vw);
     height: min(650px, 88vh);
+    max-height: calc(100vh - 36px);
+    max-height: calc(100dvh - 36px);
+    min-height: 0;
     display: grid;
     grid-template-rows: auto 1fr;
     overflow: hidden;
@@ -1820,8 +1831,10 @@ body {
 
 .dream-main {
     min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .dream-editor-header {
@@ -1883,11 +1896,15 @@ body {
 
 .dream-body {
     min-height: 0;
+    max-height: 100%;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 330px;
     gap: 16px;
     padding: 18px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
 }
 
 .dream-compose {
@@ -2377,6 +2394,20 @@ body {
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32), 0 0 0 4px rgba(125, 211, 252, 0.14);
 }
 
+.dream-object-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.28;
+    filter: grayscale(0.8);
+    transform: translate(calc(var(--dream-controls-x, 50vw) - 50%), calc(var(--dream-controls-y, 50vh) - 50%));
+}
+
+.dream-object-btn:disabled:hover,
+.dream-object-btn:disabled:active {
+    background: rgba(248, 250, 252, 0.42);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    transform: translate(calc(var(--dream-controls-x, 50vw) - 50%), calc(var(--dream-controls-y, 50vh) - 50%));
+}
+
 .dream-object-btn img {
     width: 23px;
     height: 23px;
@@ -2600,6 +2631,105 @@ body.dream-revision-pending .touch-actions {
     padding: 28px;
     text-align: center;
     color: rgba(255, 255, 255, 0.46);
+}
+
+/* Shared overlay scrollbars */
+#dialogue-text-area,
+#model-list,
+.settings-inner,
+.select-options,
+#history-list,
+#date-history-list,
+#achievement-list,
+.gift-terminal-body,
+#gift-collection-list,
+#dream-terminal-panel,
+.dream-body,
+.dream-editor-body,
+#date-locations,
+#date-chat-area {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(224, 232, 255, 0.24) rgba(255, 255, 255, 0.035);
+}
+
+#dialogue-text-area::-webkit-scrollbar,
+#model-list::-webkit-scrollbar,
+.settings-inner::-webkit-scrollbar,
+.select-options::-webkit-scrollbar,
+#history-list::-webkit-scrollbar,
+#date-history-list::-webkit-scrollbar,
+#achievement-list::-webkit-scrollbar,
+.gift-terminal-body::-webkit-scrollbar,
+#gift-collection-list::-webkit-scrollbar,
+#dream-terminal-panel::-webkit-scrollbar,
+.dream-body::-webkit-scrollbar,
+.dream-editor-body::-webkit-scrollbar,
+#date-locations::-webkit-scrollbar,
+#date-chat-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+#dialogue-text-area::-webkit-scrollbar-track,
+#model-list::-webkit-scrollbar-track,
+.settings-inner::-webkit-scrollbar-track,
+.select-options::-webkit-scrollbar-track,
+#history-list::-webkit-scrollbar-track,
+#date-history-list::-webkit-scrollbar-track,
+#achievement-list::-webkit-scrollbar-track,
+.gift-terminal-body::-webkit-scrollbar-track,
+#gift-collection-list::-webkit-scrollbar-track,
+#dream-terminal-panel::-webkit-scrollbar-track,
+.dream-body::-webkit-scrollbar-track,
+.dream-editor-body::-webkit-scrollbar-track,
+#date-locations::-webkit-scrollbar-track,
+#date-chat-area::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+#dialogue-text-area::-webkit-scrollbar-thumb,
+#model-list::-webkit-scrollbar-thumb,
+.settings-inner::-webkit-scrollbar-thumb,
+.select-options::-webkit-scrollbar-thumb,
+#history-list::-webkit-scrollbar-thumb,
+#date-history-list::-webkit-scrollbar-thumb,
+#achievement-list::-webkit-scrollbar-thumb,
+.gift-terminal-body::-webkit-scrollbar-thumb,
+#gift-collection-list::-webkit-scrollbar-thumb,
+#dream-terminal-panel::-webkit-scrollbar-thumb,
+.dream-body::-webkit-scrollbar-thumb,
+.dream-editor-body::-webkit-scrollbar-thumb,
+#date-locations::-webkit-scrollbar-thumb,
+#date-chat-area::-webkit-scrollbar-thumb {
+    min-height: 42px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background:
+        linear-gradient(rgba(224, 232, 255, 0.34), rgba(172, 196, 226, 0.22)) padding-box,
+        transparent border-box;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+#dialogue-text-area::-webkit-scrollbar-thumb:hover,
+#model-list::-webkit-scrollbar-thumb:hover,
+.settings-inner::-webkit-scrollbar-thumb:hover,
+.select-options::-webkit-scrollbar-thumb:hover,
+#history-list::-webkit-scrollbar-thumb:hover,
+#date-history-list::-webkit-scrollbar-thumb:hover,
+#achievement-list::-webkit-scrollbar-thumb:hover,
+.gift-terminal-body::-webkit-scrollbar-thumb:hover,
+#gift-collection-list::-webkit-scrollbar-thumb:hover,
+#dream-terminal-panel::-webkit-scrollbar-thumb:hover,
+.dream-body::-webkit-scrollbar-thumb:hover,
+.dream-editor-body::-webkit-scrollbar-thumb:hover,
+#date-locations::-webkit-scrollbar-thumb:hover,
+#date-chat-area::-webkit-scrollbar-thumb:hover {
+    background:
+        linear-gradient(rgba(240, 246, 255, 0.52), rgba(190, 214, 245, 0.34)) padding-box,
+        transparent border-box;
 }
 
 /* Date Panel */

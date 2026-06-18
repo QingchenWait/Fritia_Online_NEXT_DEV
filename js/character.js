@@ -1244,6 +1244,11 @@ export function refreshCharacterNavigationData(cd, scope = {}) {
         ...(scope.bounds ? { bounds: scope.bounds } : {})
     };
 
+    if (scope.forceRepath) {
+        forceStandUp(cd);
+        return;
+    }
+
     if (!isCurrentWalkPathClear(cd)) {
         cd.walkPathQueue = null;
         cd.targetWaypoint = null;

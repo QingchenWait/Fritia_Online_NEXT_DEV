@@ -32,6 +32,7 @@ const DREAM_DELETE_REFUND = 400;
 const DIALOGUE_COOLDOWN_MS = 20 * 1000;
 const FURNITURE_DIALOGUE_LLM_RATE = 0.5;
 const MOVE_STEP = 0.25;
+const WALL_MOVE_STEP = 0.18;
 const ROTATE_STEP = THREE.MathUtils.degToRad(15);
 const MAX_LOOK_DISTANCE = 5;
 const FALLBACK_FURNITURE_LINES = [
@@ -94,7 +95,9 @@ let lookDragPointerId = null;
 let lastLookDrag = { x: 0, y: 0 };
 const projectedControlPosition = new THREE.Vector3();
 const projectedBubblePosition = new THREE.Vector3();
+const furnitureSpeechTarget = new THREE.Vector3();
 const characterBubbleBox = new THREE.Box3();
+let furnitureSpeechTurnToken = 0;
 
 function vectorToPlainBounds(box) {
     if (!box) return null;
@@ -149,11 +152,75 @@ function copyPose(pose) {
     return {
         position: {
             x: Number(pose?.position?.x) || 0,
-            y: 0,
+            y: Number(pose?.position?.y) || 0,
             z: Number(pose?.position?.z) || 0
         },
-        rotationY: Number(pose?.rotationY) || 0
+        rotationY: Number(pose?.rotationY) || 0,
+        wall: typeof pose?.wall === 'string' ? pose.wall : '',
+        anchor: typeof pose?.anchor === 'string' ? pose.anchor : ''
     };
+}
+
+function isWallFurniture(recordOrSpec) {
+    const spec = recordOrSpec?.spec || recordOrSpec;
+    return spec?.anchor === 'wall' || spec?.category === 'hanging';
+}
+
+function hasExplicitWallMountIntent(text) {
+    return /挂在墙|挂墙|墙上|墙面|壁挂|悬挂|挂钟|挂画|墙饰|wall[-\s]?mounted|on\s+the\s+wall|hanging/i.test(String(text || ''));
+}
+
+function hasFurnitureSurfaceHangingIntent(text) {
+    return /挂|悬挂|壁挂|挂钟|时钟|钟表|墙饰|吊饰|clock|hanging|wall[-\s]?mounted/i.test(String(text || ''));
+}
+
+function componentLooksLikeHangingAttachment(component) {
+    const name = `${component?.name || ''} ${component?.material || ''}`;
+    if (/挂|钟|clock|wall|hanging|ornament|decor/i.test(name)) return true;
+    const size = component?.size || {};
+    const thinDepth = Math.min(Number(size.x) || 0, Number(size.z) || 0);
+    const broadFace = Math.max(Number(size.x) || 0, Number(size.y) || 0, Number(size.z) || 0);
+    return thinDepth > 0 && thinDepth <= 0.12 && broadFace >= 0.22 && Number(component?.position?.y || 0) > 0.7;
+}
+
+function alignHangingAttachmentsOnFurniture(spec, instruction) {
+    if (!spec || isWallFurniture(spec) || !hasFurnitureSurfaceHangingIntent(instruction)) return spec;
+    const next = copyJson(spec);
+    const components = Array.isArray(next.components) ? next.components : [];
+    const face = next.frontDirection || '+Z';
+    let changed = false;
+
+    for (const component of components) {
+        if (!componentLooksLikeHangingAttachment(component)) continue;
+        const size = component.size || {};
+        component.position = component.position || { x: 0, y: 1, z: 0 };
+        component.rotation = component.rotation || { x: 0, y: 0, z: 0 };
+        if (face === '+X') {
+            component.position.x = next.dimensions.width / 2 + (Number(size.x) || 0.05) / 2 + 0.018;
+            component.rotation.y = Math.PI / 2;
+            next.dimensions.width = Math.max(next.dimensions.width, Math.abs(component.position.x) * 2 + (Number(size.x) || 0.05));
+        } else if (face === '-X') {
+            component.position.x = -next.dimensions.width / 2 - (Number(size.x) || 0.05) / 2 - 0.018;
+            component.rotation.y = -Math.PI / 2;
+            next.dimensions.width = Math.max(next.dimensions.width, Math.abs(component.position.x) * 2 + (Number(size.x) || 0.05));
+        } else if (face === '-Z') {
+            component.position.z = -next.dimensions.depth / 2 - (Number(size.z) || 0.05) / 2 - 0.018;
+            component.rotation.y = Math.PI;
+            next.dimensions.depth = Math.max(next.dimensions.depth, Math.abs(component.position.z) * 2 + (Number(size.z) || 0.05));
+        } else {
+            component.position.z = next.dimensions.depth / 2 + (Number(size.z) || 0.05) / 2 + 0.018;
+            component.rotation.y = 0;
+            next.dimensions.depth = Math.max(next.dimensions.depth, Math.abs(component.position.z) * 2 + (Number(size.z) || 0.05));
+        }
+        component.position.y = clamp(
+            Number(component.position.y) || next.dimensions.height * 0.62,
+            (Number(size.y) || 0.1) / 2 + 0.08,
+            Math.max((Number(size.y) || 0.1) / 2 + 0.08, next.dimensions.height - (Number(size.y) || 0.1) / 2 - 0.08)
+        );
+        changed = true;
+    }
+
+    return changed ? normalizeFurnitureSpec(next) : spec;
 }
 
 function copyJson(value) {
@@ -195,6 +262,16 @@ function isBoxInsideRoom(box) {
         && box.max.y <= dreamRoomBounds.max.y - 0.05;
 }
 
+function isWallBoxInsideRoom(box) {
+    const margin = 0.003;
+    return box.min.x >= dreamRoomBounds.min.x + margin
+        && box.max.x <= dreamRoomBounds.max.x - margin
+        && box.min.z >= dreamRoomBounds.min.z + margin
+        && box.max.z <= dreamRoomBounds.max.z - margin
+        && box.min.y >= 0.35
+        && box.max.y <= dreamRoomBounds.max.y - 0.18;
+}
+
 function getOtherFurnitureColliders(excludeId = '') {
     return Array.from(runtime.values())
         .filter(item => item.id !== excludeId)
@@ -204,7 +281,8 @@ function getOtherFurnitureColliders(excludeId = '') {
 
 function validateRuntimePlacement(group, excludeId = '') {
     const box = estimateFurnitureAABB(group);
-    if (!isBoxInsideRoom(box)) {
+    const isWallMounted = group.userData?.anchor === 'wall';
+    if (isWallMounted ? !isWallBoxInsideRoom(box) : !isBoxInsideRoom(box)) {
         return { ok: false, error: '家具会穿出房间边界。' };
     }
     if (intersectsDoorZone(box)) {
@@ -323,7 +401,124 @@ function buildCandidatePositions(spec, placementText = '', placement = {}) {
     return candidates;
 }
 
+function buildWallMountCandidates(spec, placementText = '') {
+    const text = `${placementText || ''} ${spec.placement?.intent || ''} ${spec.placement?.preferredWall || ''}`.toLowerCase();
+    const width = spec.dimensions.width;
+    const height = spec.dimensions.height;
+    const depth = Math.max(0.06, spec.dimensions.depth);
+    const xMinOnZWall = dreamRoomBounds.min.x + width / 2 + 0.25;
+    const xMaxOnZWall = dreamRoomBounds.max.x - width / 2 - 0.25;
+    const zMinOnXWall = dreamRoomBounds.min.z + width / 2 + 0.25;
+    const zMaxOnXWall = dreamRoomBounds.max.z - width / 2 - 0.25;
+    const yMin = Math.max(0.55 + height / 2, 0.75);
+    const yMax = dreamRoomBounds.max.y - height / 2 - 0.25;
+    const yDefault = clamp(/低|矮|below|lower/.test(text) ? 1.15 : /高|上|top|high/.test(text) ? 2.15 : 1.65, yMin, yMax);
+    const centerX = (dreamRoomBounds.min.x + dreamRoomBounds.max.x) / 2;
+    const centerZ = (dreamRoomBounds.min.z + dreamRoomBounds.max.z) / 2;
+    const candidates = [];
+    const add = (wall, x, y, z, rotationY, reason = '') => {
+        const onZWall = wall === 'front' || wall === 'back';
+        candidates.push({
+            wall,
+            position: {
+                x: onZWall ? clamp(x, xMinOnZWall, xMaxOnZWall) : x,
+                y: clamp(y, yMin, yMax),
+                z: onZWall ? z : clamp(z, zMinOnXWall, zMaxOnXWall)
+            },
+            rotationY,
+            reason
+        });
+    };
+
+    const preferWindowWall = /窗|window/.test(text);
+    const preferDoor = /门|入口|door/.test(text);
+    const preferFar = /最里面|深处|far|inside/.test(text);
+    const zBack = dreamRoomBounds.min.z + depth / 2 + 0.08;
+    const zFront = dreamRoomBounds.max.z - depth / 2 - 0.08;
+    const xShared = dreamRoomBounds.min.x + depth / 2 + 0.08;
+    const xFar = dreamRoomBounds.max.x - depth / 2 - 0.08;
+
+    if (preferWindowWall) add('back', 8.35, yDefault, zBack, 0, 'window_wall');
+    if (preferDoor) add('shared', xShared, yDefault, centerZ, Math.PI / 2, 'near_door_wall');
+    if (preferFar) add('right', xFar, yDefault, centerZ, -Math.PI / 2, 'far_wall');
+    if (/左|left/.test(text)) add('back', xMinOnZWall, yDefault, zBack, 0, 'left_on_wall');
+    if (/右|right/.test(text)) add('front', xMaxOnZWall, yDefault, zFront, Math.PI, 'right_on_wall');
+
+    add('front', centerX, yDefault, zFront, Math.PI, 'front_wall');
+    add('back', centerX, yDefault, zBack, 0, 'back_wall');
+    add('right', xFar, yDefault, centerZ, -Math.PI / 2, 'right_wall');
+    add('shared', xShared, yDefault, centerZ, Math.PI / 2, 'shared_wall');
+    add('front', centerX, clamp(2.05, yMin, yMax), zFront, Math.PI, 'front_high');
+    add('back', centerX, clamp(1.2, yMin, yMax), zBack, 0, 'back_low');
+
+    return candidates;
+}
+
+function findSafeWallPlacement(group, spec, placementText = '', excludeId = '') {
+    const candidates = buildWallMountCandidates(spec, placementText);
+    let lastError = '没有安全悬挂位置。';
+
+    group.userData.anchor = 'wall';
+    for (const candidate of candidates) {
+        const pose = applyWallFurniturePose(group, {
+            position: candidate.position,
+            rotationY: candidate.rotationY,
+            wall: candidate.wall,
+            anchor: 'wall'
+        });
+        const validation = validateRuntimePlacement(group, excludeId);
+        if (validation.ok) {
+            return {
+                ok: true,
+                pose
+            };
+        }
+        lastError = validation.error;
+    }
+
+    return { ok: false, error: lastError };
+}
+
+function alignWallFurnitureToSurface(group, wall) {
+    if (!group || !wall || !dreamRoomBounds) return;
+    const flushOffset = 0.006;
+
+    group.updateMatrixWorld(true);
+    const box = estimateFurnitureAABB(group);
+    if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) return;
+
+    if (wall === 'back') {
+        group.position.z += dreamRoomBounds.min.z + flushOffset - box.min.z;
+    } else if (wall === 'front') {
+        group.position.z += dreamRoomBounds.max.z - flushOffset - box.max.z;
+    } else if (wall === 'shared') {
+        group.position.x += dreamRoomBounds.min.x + flushOffset - box.min.x;
+    } else if (wall === 'right') {
+        group.position.x += dreamRoomBounds.max.x - flushOffset - box.max.x;
+    }
+    group.updateMatrixWorld(true);
+}
+
+function applyWallFurniturePose(group, pose) {
+    applyFurniturePose(group, pose);
+    alignWallFurnitureToSurface(group, pose?.wall);
+    return {
+        position: {
+            x: group.position.x,
+            y: group.position.y,
+            z: group.position.z
+        },
+        rotationY: Number(pose?.rotationY) || 0,
+        wall: pose?.wall || '',
+        anchor: 'wall'
+    };
+}
+
 function findSafePlacement(group, spec, placementText = '', excludeId = '') {
+    if (isWallFurniture(spec)) {
+        return findSafeWallPlacement(group, spec, placementText, excludeId);
+    }
+
     const baseRotation = directionToRotation(spec.frontDirection);
     const candidates = buildCandidatePositions(spec, placementText, spec.placement);
     let lastError = '没有安全摆放位置。';
@@ -422,15 +617,20 @@ function deployRecord(record) {
     const { group, spec } = createFurnitureFromSpec(record.spec);
     group.name = record.name;
     group.userData.dreamFurnitureId = record.id;
+    group.userData.anchor = isWallFurniture(record) ? 'wall' : 'floor';
     group.userData.interactionCenter = new THREE.Vector3(
         record.pose.position.x,
-        Math.min(1.4, spec.dimensions.height * 0.65),
+        isWallFurniture(record) ? record.pose.position.y : Math.min(1.4, spec.dimensions.height * 0.65),
         record.pose.position.z
     );
-    applyFurniturePose(group, record.pose);
+    if (isWallFurniture(record)) {
+        record.pose = copyPose(applyWallFurniturePose(group, record.pose));
+    } else {
+        applyFurniturePose(group, record.pose);
+    }
     group.userData.interactionCenter = new THREE.Vector3(
         group.position.x,
-        Math.min(1.4, spec.dimensions.height * 0.65),
+        isWallFurniture(record) ? group.position.y : Math.min(1.4, spec.dimensions.height * 0.65),
         group.position.z
     );
     scene.add(group);
@@ -601,6 +801,7 @@ function bindMoveHold(id, intent) {
     if (!btn) return;
     let isPressed = false;
     const start = (event) => {
+        if (btn.disabled) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         event.preventDefault();
         isPressed = true;
@@ -649,6 +850,7 @@ function bindRotateHold(id, amount) {
     if (!btn) return;
     let isPressed = false;
     const start = (event) => {
+        if (btn.disabled) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         event.preventDefault();
         isPressed = true;
@@ -870,6 +1072,13 @@ async function handleCreateFurniture() {
         let spec;
         try {
             spec = normalizeFurnitureSpec(llm.spec);
+            if (hasExplicitWallMountIntent(`${description} ${placementText}`)) {
+                spec.anchor = 'wall';
+                spec.category = 'hanging';
+            } else if (isWallFurniture(spec)) {
+                spec.anchor = 'floor';
+                if (spec.category === 'hanging') spec.category = 'decor';
+            }
         } catch (err) {
             setStatus(`JSON schema 校验失败：${err.message}`, 'warn');
             return;
@@ -948,9 +1157,20 @@ export function openDreamFurnitureEditor(furnitureId) {
     editingId = id;
     editSnapshot = copyPose(record.pose);
     els.objectControls?.classList.remove('hidden');
+    updateObjectControlModes(record);
     controlsModule?.releaseControlMode({ resumeOnClose: true });
     controlsModule?.setMovementLocked?.(true);
     startObjectControlsProjection();
+}
+
+function updateObjectControlModes(record) {
+    const wallMounted = isWallFurniture(record);
+    document.getElementById('dream-object-rotate-left')?.toggleAttribute('disabled', wallMounted);
+    document.getElementById('dream-object-rotate-right')?.toggleAttribute('disabled', wallMounted);
+    const forward = document.getElementById('dream-object-move-forward');
+    const back = document.getElementById('dream-object-move-back');
+    if (forward) forward.title = wallMounted ? '向上移动' : '向前移动';
+    if (back) back.title = wallMounted ? '向下移动' : '向后移动';
 }
 
 function openFurnitureEditPanel() {
@@ -966,10 +1186,19 @@ function openFurnitureEditPanel() {
         `;
     }
     if (els.editorName) els.editorName.value = record.name;
-    if (els.editorStyleInstruction) els.editorStyleInstruction.value = '';
+    if (els.editorStyleInstruction) {
+        els.editorStyleInstruction.value = '';
+        els.editorStyleInstruction.disabled = isWallFurniture(record);
+        els.editorStyleInstruction.placeholder = isWallFurniture(record)
+            ? '悬挂式家具无法进行样式修改'
+            : '例如：在桌子上放一台电脑、把床加宽一些';
+    }
+    if (els.editorStyleButton) {
+        els.editorStyleButton.disabled = isWallFurniture(record);
+    }
     renderBalance();
     updateStyleRevisionProgress(false);
-    setEditorStatus('');
+    setEditorStatus(isWallFurniture(record) ? '悬挂式家具无法编辑样式，只能沿墙面移动或删除。' : '');
     els.editor?.classList.remove('hidden');
     setTimeout(() => els.editorName?.focus(), 80);
 }
@@ -1019,6 +1248,8 @@ export function closeDreamFurnitureEditor() {
     rotateHoldTimer = null;
     editingId = null;
     editSnapshot = null;
+    document.getElementById('dream-object-rotate-left')?.removeAttribute('disabled');
+    document.getElementById('dream-object-rotate-right')?.removeAttribute('disabled');
     stopObjectControlsProjection();
     els.objectControls?.classList.add('hidden');
     if (editorWasOpen) closeById('dream-furniture-editor-panel');
@@ -1090,7 +1321,7 @@ function getEditingRecord() {
     return furnitureRecords.find(item => item.id === editingId) || null;
 }
 
-function refreshRecordRuntime(record) {
+function refreshRecordRuntime(record, options = {}) {
     const deployed = deployRecord(record);
     const validation = validateRuntimePlacement(deployed.group, record.id);
     if (!validation.ok) {
@@ -1101,7 +1332,10 @@ function refreshRecordRuntime(record) {
     deployed.waypoint = createWaypoint(record, deployed.group);
     runtime.set(record.id, deployed);
     saveFurniture();
-    onFurnitureChanged();
+    onFurnitureChanged({
+        furnitureId: record.id,
+        forceCharacterRepath: Boolean(options.forceCharacterRepath)
+    });
     controlsModule?.resolveCameraCollisions?.();
     return { ok: true };
 }
@@ -1157,9 +1391,58 @@ function getEditMoveDelta(intent, amount) {
     return { dx: axisX * amount, dz: axisZ * amount };
 }
 
+function getWallMoveDelta(record, intent, amount) {
+    if (intent === 'forward') return { dx: 0, dy: amount, dz: 0 };
+    if (intent === 'back') return { dx: 0, dy: -amount, dz: 0 };
+    const wall = record.pose?.wall || 'front';
+    let tangentX = wall === 'front' || wall === 'back' ? 1 : 0;
+    let tangentZ = wall === 'front' || wall === 'back' ? 0 : 1;
+
+    if (camera) {
+        camera.getWorldDirection(lookDirection);
+        lookDirection.y = 0;
+        if (lookDirection.lengthSq() > 0.0001) {
+            lookDirection.normalize();
+            const rightX = -lookDirection.z;
+            const rightZ = lookDirection.x;
+            const dot = rightX * tangentX + rightZ * tangentZ;
+            if (dot < 0) {
+                tangentX *= -1;
+                tangentZ *= -1;
+            }
+        }
+    }
+
+    const sign = intent === 'left' ? -1 : 1;
+    return { dx: tangentX * sign * amount, dy: 0, dz: tangentZ * sign * amount };
+}
+
 function moveEditingFurnitureByIntent(intent, amount) {
+    const record = getEditingRecord();
+    if (!record) return;
+    if (isWallFurniture(record)) {
+        const wallAmount = Math.max(0.01, Math.abs(amount || MOVE_STEP) / MOVE_STEP * WALL_MOVE_STEP);
+        const delta = getWallMoveDelta(record, intent, wallAmount);
+        moveEditingWallFurniture(delta);
+        return;
+    }
     const delta = getEditMoveDelta(intent, amount);
     moveEditingFurniture(delta.dx, delta.dz);
+}
+
+function moveEditingWallFurniture(delta) {
+    const record = getEditingRecord();
+    if (!record) return;
+    const next = copyPose(record.pose);
+    next.position.x += delta.dx || 0;
+    next.position.y += delta.dy || 0;
+    next.position.z += delta.dz || 0;
+    next.wall = record.pose?.wall || next.wall;
+    next.anchor = 'wall';
+    if (!tryPoseEdit(record, next, '')) {
+        const axisText = delta.dy > 0 ? '天花板' : delta.dy < 0 ? '地板' : '墙面边缘';
+        showDreamScreenToast(`已到达${axisText}边缘，无法继续移动。`, 'warn');
+    }
 }
 
 function moveEditingFurniture(dx, dz) {
@@ -1174,6 +1457,10 @@ function moveEditingFurniture(dx, dz) {
 function rotateEditingFurniture(amount) {
     const record = getEditingRecord();
     if (!record) return;
+    if (isWallFurniture(record)) {
+        showDreamScreenToast('悬挂式家具不能旋转。', 'warn');
+        return;
+    }
     const next = copyPose(record.pose);
     next.rotationY += amount;
     tryPoseEdit(record, next, '');
@@ -1202,6 +1489,10 @@ async function handleStyleRevision() {
     if (isRevising || pendingRevision) return;
     const record = getEditingRecord();
     if (!record) return;
+    if (isWallFurniture(record)) {
+        setEditorStatus('悬挂式家具无法编辑样式。', 'warn');
+        return;
+    }
     const instruction = els.editorStyleInstruction?.value.trim() || '';
     if (!instruction) {
         setEditorStatus('请先填写家具样式修改要求。', 'warn');
@@ -1245,6 +1536,11 @@ async function handleStyleRevision() {
             revisedSpec = normalizeFurnitureSpec(llm.spec);
             revisedSpec.name = previousSpec.name || record.name;
             revisedSpec.description = previousSpec.description || record.description;
+            revisedSpec.anchor = previousSpec.anchor || 'floor';
+            revisedSpec.category = previousSpec.category || record.category;
+            revisedSpec = alignHangingAttachmentsOnFurniture(revisedSpec, instruction);
+            revisedSpec.anchor = previousSpec.anchor || 'floor';
+            revisedSpec.category = previousSpec.category || record.category;
         } catch (err) {
             setEditorStatus(`JSON schema 校验失败：${err.message}`, 'warn');
             return;
@@ -1268,16 +1564,16 @@ async function handleStyleRevision() {
 
         updateStyleRevisionProgress(true, '正在部署样式预览...');
         record.spec = revisedSpec;
-        const refresh = refreshRecordRuntime(record);
+        const refresh = refreshRecordRuntime(record, { forceCharacterRepath: true });
         if (!refresh.ok) {
             record.spec = previousSpec;
-            refreshRecordRuntime(record);
+            refreshRecordRuntime(record, { forceCharacterRepath: true });
             setEditorStatus(refresh.error || '样式预览部署失败。', 'warn');
             return;
         }
         if (!spendMoney(DREAM_REVISION_COST)) {
             record.spec = previousSpec;
-            refreshRecordRuntime(record);
+            refreshRecordRuntime(record, { forceCharacterRepath: true });
             setEditorStatus('扣款失败，样式修改已回滚。', 'warn');
             return;
         }
@@ -1291,14 +1587,13 @@ async function handleStyleRevision() {
         };
         closeRevisionOverlaysForPreview();
         showRevisionConfirmBar();
-        onFurnitureChanged();
         showDreamScreenToast('样式预览已生成，请确认或回退。', 'ok');
     } catch (err) {
         console.error('[Dream] style revision failed:', err);
         setEditorStatus(`未知错误：${err.message || err}`, 'warn');
     } finally {
         isRevising = false;
-        if (els.editorStyleButton) els.editorStyleButton.disabled = false;
+        if (els.editorStyleButton) els.editorStyleButton.disabled = isWallFurniture(getEditingRecord());
         updateStyleRevisionProgress(false);
     }
 }
@@ -1328,10 +1623,10 @@ export function confirmPendingDreamRevision() {
     if (!pendingRevision) return;
     const record = furnitureRecords.find(item => item.id === pendingRevision.furnitureId);
     if (record) {
+        refreshRecordRuntime(record, { forceCharacterRepath: true });
         record.revisionCount = Math.max(0, Math.round(Number(record.revisionCount) || 0)) + 1;
         saveFurniture();
         recordDreamFurnitureRevision(record.revisionCount);
-        onFurnitureChanged();
     }
     pendingRevision = null;
     hideRevisionConfirmBar();
@@ -1343,13 +1638,12 @@ export function rollbackPendingDreamRevision() {
     const record = furnitureRecords.find(item => item.id === pendingRevision.furnitureId);
     if (record) {
         record.spec = pendingRevision.previousSpec;
-        refreshRecordRuntime(record);
+        refreshRecordRuntime(record, { forceCharacterRepath: true });
         saveFurniture();
     }
     addMoney(DREAM_REVISION_REFUND, 'dream_furniture_revision_refund');
     pendingRevision = null;
     hideRevisionConfirmBar();
-    onFurnitureChanged();
     showDreamScreenToast(`已回退样式，并返还 ${formatMoney(DREAM_REVISION_REFUND)}。`, 'warn');
 }
 
@@ -1410,6 +1704,64 @@ function getFallbackFurnitureLine() {
     return lines[Math.floor(Math.random() * lines.length)] || '分析员打造的家具太棒啦。';
 }
 
+function easeInOutCubic(t) {
+    const x = clamp(Number(t) || 0, 0, 1);
+    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+function lerpAngle(a, b, t) {
+    const diff = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+    return a + diff * t;
+}
+
+function getFurnitureLookTarget(record, out) {
+    const item = runtime.get(record?.id);
+    if (!item) return false;
+    if (item.collider) {
+        item.collider.getCenter(out);
+        return true;
+    }
+    if (item.group) {
+        item.group.updateMatrixWorld(true);
+        characterBubbleBox.setFromObject(item.group);
+        characterBubbleBox.getCenter(out);
+        return Number.isFinite(out.x);
+    }
+    return false;
+}
+
+function waitForCharacterFacingFurniture(record, duration = 460) {
+    const root = getCharacterRoot?.();
+    if (!root || !getFurnitureLookTarget(record, furnitureSpeechTarget)) return Promise.resolve(false);
+
+    const dx = furnitureSpeechTarget.x - root.position.x;
+    const dz = furnitureSpeechTarget.z - root.position.z;
+    if (Math.hypot(dx, dz) < 0.05) return Promise.resolve(false);
+
+    const token = ++furnitureSpeechTurnToken;
+    const startYaw = root.rotation.y;
+    const targetYaw = Math.atan2(dx, dz);
+    const startedAt = performance.now();
+
+    return new Promise(resolve => {
+        const tick = (now) => {
+            if (token !== furnitureSpeechTurnToken) {
+                resolve(false);
+                return;
+            }
+            const t = clamp((now - startedAt) / duration, 0, 1);
+            root.rotation.y = lerpAngle(startYaw, targetYaw, easeInOutCubic(t));
+            if (t < 1) {
+                requestAnimationFrame(tick);
+                return;
+            }
+            root.rotation.y = targetYaw;
+            resolve(true);
+        };
+        requestAnimationFrame(tick);
+    });
+}
+
 async function handleFurnitureVisited(event) {
     const furnitureId = event.detail?.furnitureId;
     const record = furnitureRecords.find(item => item.id === furnitureId);
@@ -1438,6 +1790,7 @@ async function handleFurnitureVisited(event) {
         console.log('[Dream] furniture romantic line fallback: skipped LLM');
     }
     if (!line) line = getFallbackFurnitureLine();
+    await waitForCharacterFacingFurniture(record);
     showCharacterSpeechBubble(line);
     record.lastDialogueAt = now;
     saveFurniture();

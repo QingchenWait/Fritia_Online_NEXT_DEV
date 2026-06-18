@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 export const DREAM_FURNITURE_SCHEMA_VERSION = 1;
 
-const ALLOWED_CATEGORIES = new Set(['seat', 'table', 'bed', 'storage', 'lighting', 'decor', 'plant', 'toy', 'custom']);
+const ALLOWED_CATEGORIES = new Set(['seat', 'table', 'bed', 'storage', 'lighting', 'decor', 'plant', 'toy', 'hanging', 'custom']);
 const ALLOWED_PRIMITIVES = new Set(['box', 'cylinder', 'sphere', 'cone', 'torus', 'plane']);
 const ALLOWED_FRONT_DIRECTIONS = new Set(['+X', '-X', '+Z', '-Z']);
 const MAX_COMPONENTS = 24;
@@ -99,10 +99,18 @@ function makeMaterial(component, renderLayer = 0) {
     return mat;
 }
 
-function createGeometry(component) {
+function createGeometry(component, wallMounted = false) {
     const size = component.size;
     switch (component.type) {
         case 'cylinder': {
+            if (wallMounted) {
+                const faceHeight = Math.max(size.y, size.z);
+                const thickness = Math.max(MIN_COMPONENT_SIZE, Math.min(size.y, size.z));
+                const geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 18);
+                geo.rotateX(Math.PI / 2);
+                geo.scale(size.x, faceHeight, thickness);
+                return geo;
+            }
             const radius = Math.max(size.x, size.z) / 2;
             return new THREE.CylinderGeometry(radius, radius, size.y, 18);
         }
@@ -112,6 +120,14 @@ function createGeometry(component) {
             return geo;
         }
         case 'cone': {
+            if (wallMounted) {
+                const faceHeight = Math.max(size.y, size.z);
+                const thickness = Math.max(MIN_COMPONENT_SIZE, Math.min(size.y, size.z));
+                const geo = new THREE.ConeGeometry(0.5, 1, 18);
+                geo.rotateX(Math.PI / 2);
+                geo.scale(size.x, faceHeight, thickness);
+                return geo;
+            }
             const radius = Math.max(size.x, size.z) / 2;
             return new THREE.ConeGeometry(radius, size.y, 18);
         }
@@ -128,6 +144,17 @@ function createGeometry(component) {
         default:
             return new THREE.BoxGeometry(size.x, size.y, size.z);
     }
+}
+
+function centerWallMountedGroup(group) {
+    group.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(group);
+    if (!Number.isFinite(box.min.y) || !Number.isFinite(box.max.y)) return;
+    const centerY = (box.min.y + box.max.y) / 2;
+    for (const child of group.children) {
+        child.position.y -= centerY;
+    }
+    group.updateMatrixWorld(true);
 }
 
 export function normalizeFurnitureSpec(rawSpec) {
@@ -334,9 +361,10 @@ export function createFurnitureFromSpec(rawSpec) {
     group.name = spec.name;
     group.userData.dreamSpec = spec;
     group.userData.interactionCenter = new THREE.Vector3(0, Math.min(1.4, spec.dimensions.height * 0.65), 0);
+    const wallMounted = spec.anchor === 'wall' || spec.category === 'hanging';
 
     for (const [index, component] of spec.components.entries()) {
-        const mesh = new THREE.Mesh(createGeometry(component), makeMaterial(component, index));
+        const mesh = new THREE.Mesh(createGeometry(component, wallMounted), makeMaterial(component, index));
         mesh.name = component.name;
         mesh.position.set(component.position.x, component.position.y, component.position.z);
         mesh.rotation.set(component.rotation.x, component.rotation.y, component.rotation.z);
@@ -344,13 +372,14 @@ export function createFurnitureFromSpec(rawSpec) {
         mesh.receiveShadow = true;
         group.add(mesh);
     }
+    if (wallMounted) centerWallMountedGroup(group);
 
     return { group, spec };
 }
 
 export function applyFurniturePose(group, placement) {
     const position = placement?.position || {};
-    group.position.set(finite(position.x), 0, finite(position.z));
+    group.position.set(finite(position.x), finite(position.y), finite(position.z));
     group.rotation.y = finite(placement?.rotationY);
     group.updateMatrixWorld(true);
     return group;
@@ -363,7 +392,7 @@ export function estimateFurnitureAABB(group) {
 
 export function createFurnitureCollider(group) {
     const box = estimateFurnitureAABB(group);
-    box.min.y = 0;
+    if (box.min.y < 0.04) box.min.y = 0;
     box.max.y = Math.max(box.max.y, 0.1);
     return box;
 }
@@ -436,10 +465,12 @@ export function deserializeFurniture(data) {
         pose: {
             position: {
                 x: finite(pose.position?.x),
-                y: 0,
+                y: finite(pose.position?.y),
                 z: finite(pose.position?.z)
             },
-            rotationY: finite(pose.rotationY)
+            rotationY: finite(pose.rotationY),
+            wall: typeof pose.wall === 'string' ? pose.wall : '',
+            anchor: typeof pose.anchor === 'string' ? pose.anchor : ''
         },
         createdAt: String(data.createdAt || new Date().toISOString()),
         gameDateTime: String(data.gameDateTime || ''),

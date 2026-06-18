@@ -358,6 +358,27 @@ export function initControls(camera, domElement, colliders) {
         return requestPointerLockForResume();
     }
 
+    function forceEnterControlMode() {
+        blurActiveOverlayElement();
+        if (state.useTouchControls) {
+            enterControlMode();
+            return true;
+        }
+        if (!pointerLockSupported) {
+            enterControlMode();
+            return false;
+        }
+        const doc = domElement.ownerDocument;
+        if (doc.pointerLockElement === domElement) {
+            enterControlMode();
+            return true;
+        }
+        resumeAfterOverlay = false;
+        resumeInProgress = true;
+        syncEntryPrompt();
+        return requestPointerLockForResume();
+    }
+
     return {
         controls,
         state,
@@ -371,7 +392,8 @@ export function initControls(camera, domElement, colliders) {
         rotateView,
         releaseControlMode,
         resumeControlMode,
-        enterControlMode
+        enterControlMode,
+        forceEnterControlMode
     };
 }
 

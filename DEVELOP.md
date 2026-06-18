@@ -111,7 +111,7 @@ npm run dev
 - `isLookingAtTerminal()` / `isLookingAtDreamTerminal()` / `isLookingAtDreamDoor()` / `isLookingAtPainting()` 等：各类准星交互检测。
 - `toggleDreamDoor()`：切换造梦空间推拉门开关状态，并刷新玩家/角色碰撞作用域。
 - `updateDreamDoor(delta)`：用缓动插值滑动门板。门开启后移除门碰撞，门关闭后恢复门碰撞。
-- `startDreamFurnitureCinematic(record, runtimeItem)` / `updateDreamFurnitureCinematic(delta)` / `skipDreamFurnitureCinematic()`：新家具生成后播放约 3 秒的特写拉远镜头，镜头起终点限制在造梦空间内，避免穿墙；过场期间只允许按 `E` 跳过。
+- `startDreamFurnitureCinematic(record, runtimeItem)` / `updateDreamFurnitureCinematic(delta)` / `skipDreamFurnitureCinematic()`：新家具生成后播放约 3 秒的特写拉远镜头，镜头起终点限制在造梦空间内，避免穿墙；播放前检测结束落点的玩家碰撞风险，必要时保持玩家视角 Y 轴高度并改用附近安全位置；过场期间只允许按 `E` 跳过。
 - `refreshCharacterRoomScope(force)`：玩家进入新旧房间时，切换芙提雅导航作用域；优先让角色通过门步行进入对应房间，失败时才瞬移。
 - `getActivePlayerColliders()`：当前玩家碰撞体。门关闭时包含 `dreamDoorCollider`，门打开时移除。
 - `getActiveBedroomCharacterColliders()` / `getActiveDreamCharacterColliders()`：角色在不同房间的导航碰撞体。
@@ -206,7 +206,8 @@ npm run dev
 - `rotateView(deltaX, deltaY)`：家具快捷编辑时在非 Pointer Lock 状态下拖动视角。
 - `releaseControlMode({ resumeOnClose })`：打开 overlay 前释放控制模式。
 - `resumeControlMode()`：overlay 关闭后恢复控制模式。
-- `enterControlMode()`：直接进入操作模式；造梦家具特写过场结束后用于恢复玩家操作。
+- `enterControlMode()`：只切换内部操作状态，用于触控或 Pointer Lock 已存在的场景。
+- `forceEnterControlMode()`：主动请求 Pointer Lock 并恢复操作模式；造梦家具特写过场结束后使用该接口，避免出现可移动但鼠标未锁定的半激活状态。
 
 overlay 管理列表：
 
@@ -245,7 +246,7 @@ overlay 管理列表：
 - `forceStandUp(cd)`：强制从坐下状态起身。
 - `setSittingEnabled(cd, enabled)`：启用/禁用家具坐下逻辑；小小老师等特殊模型会禁用坐下/睡觉。
 - `setCharacterNavigationScope(cd, scope)`：完整切换导航作用域，包含 `roomId`、`bounds`、`waypoints`、`colliders`。
-- `refreshCharacterNavigationData(cd, scope)`：刷新 waypoint/collider，不重置整个角色状态；家具样式修改后使用。
+- `refreshCharacterNavigationData(cd, scope)`：刷新 waypoint/collider，不重置整个角色状态；`scope.forceRepath` 为 true 时会丢弃当前路径并回到 idle，家具形态/碰撞体变化确认或回退后使用，避免芙提雅继续沿旧路径穿过新碰撞体。
 - `moveCharacterToWaypoint(cd, waypoint, options)`：强制角色走向指定 waypoint，支持 `nextWaypoints` 队列。
 - `forceCharacterIntoRoom(cd, roomId, spawnPosition)`：寻路失败时作为兜底，把角色迁移到房间内安全位置。
 - `getCharacterPosition(cd)`：获取角色当前位置。
@@ -428,6 +429,9 @@ localStorage key：`fritia_achievements`
 - `validateFurnitureSpec(rawSpec)`：校验顶层对象、名称、类别、尺寸、组件数组、颜色、材质、朝向等。
 - `createFurnitureFromSpec(rawSpec)`：根据规范化 spec 创建 Three.js `Group`。
 - `applyFurniturePose(group, placement)`：应用家具位置和 Y 轴旋转。
+- `applyFurniturePose()` 会保留 `pose.position.y`，用于 `anchor:"wall"` 的悬挂式家具；普通地面家具仍以 `y=0` 存档和摆放。
+- 悬挂式家具渲染时以家具中心作为墙面高度锚点；`cylinder/cone` 等默认 Y 轴圆盘会在渲染层旋转到墙面平面，避免挂钟、墙饰与地板平行。
+- 悬挂式家具会在应用墙面 pose 后，用真实渲染 AABB 二次贴合墙内侧，避免因 LLM 尺寸深度和实际几何厚度不一致而与墙面留缝。
 - `estimateFurnitureAABB(group)`：估计家具整体 AABB。
 - `createFurnitureCollider(group)`：创建整体 AABB collider，用于 UI 投影等。
 - `createFurnitureColliders(group)`：创建组件级 collider，用于玩家和角色碰撞。样式修改后可增加/减少实体碰撞区域。
@@ -441,6 +445,11 @@ localStorage key：`fritia_achievements`
 - `cone`
 - `torus`
 - `plane`
+
+支持类别：
+
+- 地面家具：`seat/table/bed/storage/lighting/decor/plant/toy/custom`
+- 悬挂家具：`hanging`，必须配合 `anchor:"wall"` 使用。只有玩家明确要求“挂在墙上、壁挂、悬挂、挂钟、墙饰”等语义时，本地才允许生成；否则即使 LLM 输出 `anchor:"wall"` 也会被改回地面家具。
 
 支持材质 preset：
 
@@ -541,16 +550,20 @@ localStorage key：`fritia_achievements`
 
 - `handleCreateFurniture()`：制造家具主流程。
 - `findSafePlacement(group, spec, placementText, excludeId)`：本地寻找安全摆放点。
+- `findSafeWallPlacement(group, spec, placementText, excludeId)`：悬挂式家具专用摆放逻辑，只在墙面上寻找位置，并保存 `pose.position.y`、`pose.wall` 和 `pose.anchor`。
+- `hasExplicitWallMountIntent(text)`：本地判断玩家是否明确要求墙挂/悬挂；未命中时禁止新家具变成悬挂式。
+- `alignHangingAttachmentsOnFurniture(spec, instruction)`：普通家具样式修改时，如果玩家要求在柱子、柜体等竖直表面挂钟/挂饰，会把疑似挂件组件贴到普通家具的竖直表面；整件家具仍保持 `anchor:"floor"`。
 - `buildCandidatePositions(spec, placementText, placement)`：根据自然语言关键词、LLM placement intent、墙/窗/门位置生成候选坐标。
 - `validateRuntimePlacement(group, excludeId)`：检查边界、门口清空区、窗户清空区、已有家具碰撞。
 - `rotateTowardInterior(pos, spec, baseRotation)`：靠墙家具自动面向房间内部。
 - `deployRecord(record)`：创建家具 mesh、整体 collider、组件 collider、waypoint，并加入场景。
-- `refreshRecordRuntime(record)`：家具移动/旋转/样式修改后刷新 mesh/collider/waypoint。
+- `refreshRecordRuntime(record, options)`：家具移动/旋转/样式修改后刷新 mesh/collider/waypoint；`options.forceCharacterRepath` 会通知主流程强制刷新芙提雅路径。
 - `onFurnitureCreated(record, runtimeItem)`：家具制造成功后通知 `main.js` 播放特写过场；样式修改、导入恢复不会触发该过场。
 - `bindMoveHold(id, intent)` / `bindRotateHold(id, amount)`：快捷按钮短按与长按连续移动/旋转。
 - `getEditMoveDelta(intent, amount)`：家具编辑方向基于玩家视角动态贴近世界 X/Z 轴；坐标轴本身不变。
 - `handleStyleRevision()`：样式修改流程。LLM 返回新 spec 后，本地校验、预览部署、扣费、进入确认/回退状态。
-- `handleFurnitureVisited(event)`：芙提雅到达动态家具 waypoint 后，按冷却和概率触发家具台词。
+- `handleFurnitureVisited(event)`：芙提雅到达动态家具 waypoint 后，按冷却和概率触发家具台词；显示气泡前会先让角色平滑转身面向对应家具。
+- `waitForCharacterFacingFurniture(record, duration)`：取家具 runtime collider/group 中心点，缓动角色 yaw 到面向家具的方向。
 - `showCharacterSpeechBubble(line)`：在芙提雅头顶显示面向屏幕的气泡。
 - `getFallbackFurnitureLine()`：LLM 失败或跳过时选择本地兜底台词。
 
@@ -580,6 +593,9 @@ localStorage key：`fritia_achievements`
 - 看向家具按 `E` 不直接打开大 overlay，而是在家具实体中心投影 `#dream-object-controls`。
 - 前/后/左/右按钮移动家具，短按一步 `0.25m`，长按超过 `0.5s` 后平滑连续移动。
 - 左转/右转按钮短按 `15°`，长按超过 `0.5s` 后平滑连续旋转。
+- 悬挂式家具的前/后按钮表示沿墙面向天花板/地板移动，左右按钮表示沿所在墙面水平移动；旋转按钮禁用。
+- 悬挂式家具的左右按钮会根据玩家当前视角在墙面切线上的投影实时决定方向，保证屏幕上的左/右和移动方向一致。
+- 悬挂式家具移动到天花板、地板或墙面边缘时会回滚，并用屏幕气泡提示。
 - 中央绿色按钮确认退出快捷编辑。
 - 重置按钮在左转按钮下方。
 - 编辑、重新自动摆放、删除三个按钮位于右侧同一列。
@@ -588,6 +604,8 @@ localStorage key：`fritia_achievements`
 样式修改：
 
 - 在家具编辑 overlay 的“家具样式修改”中输入自然语言要求。
+- 悬挂式家具无法样式修改；编辑 overlay 会禁用样式输入框和“样式变更”按钮，并显示提示。
+- 普通家具样式修改会强制保留原 `anchor/category`，不能通过 LLM 变成悬挂式家具；但允许新增贴在普通家具竖直表面的挂件组件。
 - 成功后退出 overlay，进入主界面预览状态。
 - 显示 `[1] 确认` 和 `[2] 回退`。
 - 未确认/回退前，玩家可走动但不能触发其他交互，并被限制在造梦空间内。
@@ -600,6 +618,7 @@ localStorage key：`fritia_achievements`
 - 同一家具冷却：`20 * 1000` ms 现实时间。
 - LLM 调用概率：当前为 `0.5`，未调用或失败时使用本地兜底台词。
 - 如果芙提雅头顶位置不在玩家当前视野内，则当次不显示气泡，也不发起台词展示。
+- 台词气泡出现前，芙提雅会先在约 `0.46s` 内平滑转身，让身体正面面向对应家具。
 - 日常对话、约会、礼物、造梦 overlay、睡眠、非操作模式中不会触发家具台词。
 
 ## DOM ID 清单
@@ -785,7 +804,9 @@ localStorage key：`fritia_achievements`
   "spec": {},
   "pose": {
     "position": { "x": 8, "y": 0, "z": 1 },
-    "rotationY": 0
+    "rotationY": 0,
+    "wall": "",
+    "anchor": ""
   },
   "createdAt": "ISO 时间",
   "gameDateTime": "游戏内日期时间",
@@ -940,23 +961,26 @@ Escape：
 6. 复杂家具 JSON 不应因本地 `max_tokens` 上限被截断。
 7. 家具生成成功后播放约 3 秒特写拉远镜头；镜头完整展示家具、不穿墙，过场期间玩家不能移动，按 E 可跳过。
 8. 家具不穿墙、不堵门、不挡窗、不与已有家具重叠。
-9. 刷新页面后家具恢复。
-10. 导出/导入后家具恢复。
-11. 看向家具按 E 显示快捷编辑按钮。
-12. 移动、旋转、重置、删除流程可用。
-13. 删除家具退回 400 数据金并在 HUD 显示 `+400`。
-14. 样式修改成功后显示 `[1] 确认` 和 `[2] 回退`。
-15. 确认样式修改后该家具 `revisionCount` 增加，连续 3 次确认可触发“完美主义”。
-16. 回退样式恢复原 spec 并退回 50 数据金。
-17. 样式修改后玩家和芙提雅碰撞体同步更新。
-18. 造梦空间内存在家具达到 5 件时触发“布置爱巢”。
+9. 明确输入“挂在墙上的时钟”等语义时，生成 `hanging`/`anchor:"wall"` 家具并贴在墙面；未明确要求悬挂时，家具仍默认落地。
+10. 悬挂式家具编辑时，前/后沿墙面上下移动，左右沿墙面水平移动，旋转按钮禁用，样式修改禁用。
+11. 普通家具样式修改中要求“在柱子上挂一个时钟”时，挂件作为普通家具组件贴到竖直表面，整件家具仍保持普通家具。
+12. 刷新页面后家具恢复。
+13. 导出/导入后家具恢复。
+14. 看向家具按 E 显示快捷编辑按钮。
+15. 移动、旋转、重置、删除流程可用。
+16. 删除家具退回 400 数据金并在 HUD 显示 `+400`。
+17. 样式修改成功后显示 `[1] 确认` 和 `[2] 回退`。
+18. 确认样式修改后该家具 `revisionCount` 增加，连续 3 次确认可触发“完美主义”。
+19. 回退样式恢复原 spec 并退回 50 数据金。
+20. 样式修改后玩家和芙提雅碰撞体同步更新。
+21. 造梦空间内存在家具达到 5 件时触发“布置爱巢”。
 
 角色：
 
 1. 玩家进入造梦空间后，芙提雅通过门步行进入新房间；寻路失败时才瞬移。
 2. 玩家回旧房间后，芙提雅回到旧房间并只在旧房间 waypoint 中移动。
 3. 芙提雅能绕开动态家具。
-4. 芙提雅访问动态家具时，若在视野内且满足冷却/概率，头顶显示家具台词气泡。
+4. 芙提雅访问动态家具时，若在视野内且满足冷却/概率，会先平滑转身面向家具，再在头顶显示家具台词气泡。
 5. 床和椅子的坐姿位于正确边缘，不悬空、不突然长距离滑移。
 
 ## 已知限制
