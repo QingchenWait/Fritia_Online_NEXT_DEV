@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>芙提雅 Online NEXT</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="loading-screen">
+        <div class="loading-content">
+            <h2>芙提雅 Online <span class="title-tag">NEXT</span></h2>
+            <p class="loading-sub">正在准备中...</p>
+            <div class="loading-bar">
+                <div class="loading-bar-fill" id="loading-progress"></div>
+            </div>
+            <p id="loading-text">初始化场景...</p>
+        </div>
+        <p class="loading-credit">青尘工作室出品 | CyanDust_青尘</p>
+    </div>
+
+    <canvas id="game-canvas"></canvas>
+
+    <div id="fade-overlay"></div>
+
+    <div id="sleep-ui" class="hidden">
+        <button class="sleep-btn" id="btn-pet">按 <kbd>F</kbd> 摸头</button>
+        <button class="sleep-btn" id="btn-wake">按 <kbd>E</kbd> 起床</button>
+    </div>
+
+    <input type="file" id="painting-upload" accept="image/*" style="display:none">
+
+    <div id="model-selector" class="hidden">
+        <div class="model-selector-inner">
+            <h3>芙提雅换装</h3>
+            <div id="model-list"></div>
+            <button id="model-close">关闭</button>
+        </div>
+    </div>
+
+    <div id="touch-controls">
+        <div class="touch-joystick" id="joystick-move">
+            <div class="joystick-knob" id="joystick-move-knob"></div>
+        </div>
+        <div class="touch-actions">
+            <div class="touch-btn interact-btn" id="btn-interact">F</div>
+            <div class="touch-btn" id="btn-look">视角</div>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div id="crosshair">+</div>
+        <div id="game-status">
+            <div id="game-time-display">1月1日 12:00</div>
+            <div id="affinity-display">好感度 | ❤️ <span id="affinity-value">124/100</span></div>
+            <div id="money-display">数据金 | 🪙 40,000</div>
+            <div id="salary-toast" class="hidden"></div>
+        </div>
+        <div id="interaction-prompt" class="hidden" role="button" tabindex="0">
+            按 <kbd>F</kbd> 与芙提雅对话
+        </div>
+        <div id="painting-prompt" class="hidden" role="button" tabindex="0">
+            按 <kbd>E</kbd> 更换挂画
+        </div>
+        <div id="achievement-toast-host"></div>
+        <div id="click-to-play" class="hidden">
+            点击屏幕进入操作模式
+        </div>
+    </div>
+
+    <div id="dialogue-ui" class="hidden">
+        <div id="dialogue-box">
+            <div id="dialogue-name-plate">
+                <span id="dialogue-name">芙提雅</span>
+            </div>
+            <div id="dialogue-text-area">
+                <p id="dialogue-text"></p>
+            </div>
+            <div id="dialogue-input-area">
+                <input type="text" id="dialogue-input" placeholder="说点什么..." autocomplete="off">
+                <button id="dialogue-send">
+                    <span>发送</span>
+                </button>
+            </div>
+            <button id="dialogue-close" title="关闭对话">×</button>
+        </div>
+    </div>
+
+    <div id="top-bar">
+        <button id="btn-achievements" title="成就">
+            <img src="src/_logos/achievement_trophy.svg" alt="">
+        </button>
+        <button id="btn-history" title="历史对话">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+        </button>
+        <button id="btn-export" title="导出数据">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button id="btn-import" title="导入数据">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </button>
+        <div id="settings-toggle" title="设置">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
+            </svg>
+        </div>
+    </div>
+    <input type="file" id="import-file" accept=".json" style="display:none">
+
+    <div id="achievements-panel" class="hidden">
+        <div class="achievements-shell">
+            <div class="achievements-hero">
+                <div class="achievements-mark">
+                    <img src="src/_logos/achievement_trophy.svg" alt="">
+                </div>
+                <div>
+                    <div class="achievements-kicker">Fritia Online NEXT</div>
+                    <h2>成就列表</h2>
+                    <p>记录你和芙提雅共同完成的关键时刻。</p>
+                </div>
+                <div class="achievements-summary">
+                    <span id="achievement-summary">0/15</span>
+                    <small>已解锁</small>
+                </div>
+                <button id="achievements-close" aria-label="关闭成就列表">×</button>
+            </div>
+            <div id="achievement-list"></div>
+        </div>
+    </div>
+
+    <div id="settings-panel" class="hidden">
+        <div class="settings-inner">
+            <h3>对话模型设置 (OpenAI 格式)</h3>
+            <p class="settings-note">数据仅本地存储，不会上传云端</p>
+            <div class="setting-item">
+                <label for="api-key">API Key</label>
+                <input type="password" id="api-key" placeholder="sk-...">
+            </div>
+            <div class="setting-item">
+                <label for="base-url">Base URL</label>
+                <input type="text" id="base-url" placeholder="https://api.openai.com/v1">
+            </div>
+            <div class="setting-item">
+                <label for="model-name">模型名称</label>
+                <input type="text" id="model-name" placeholder="gpt-4o-mini">
+            </div>
+            <div class="settings-actions">
+                <button id="settings-save">保存</button>
+                <button id="settings-close">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="history-panel" class="hidden">
+        <div class="history-inner">
+            <div class="history-header">
+                <h3>历史对话</h3>
+                <div class="history-tabs">
+                    <button class="history-tab active" data-tab="daily">日常对话</button>
+                    <button class="history-tab" data-tab="date">约会行程</button>
+                </div>
+                <div class="custom-select" id="history-date-filter">
+                    <div class="select-selected">全部日期</div>
+                    <div class="select-options hidden"></div>
+                </div>
+                <button id="history-close">关闭</button>
+            </div>
+            <div id="history-list"></div>
+            <div id="date-history-list" class="hidden"></div>
+        </div>
+    </div>
+
+    <div id="date-panel" class="hidden">
+        <div class="date-inner">
+            <div class="date-header">
+                <h3>今日约会行程</h3>
+                <button id="date-close">关闭</button>
+            </div>
+            <div class="date-body">
+                <div id="date-locations"></div>
+                <div id="date-chat" class="hidden">
+                    <div class="date-chat-header">
+                        <button id="date-back-btn">← 返回</button>
+                        <span id="date-chat-title"></span>
+                        <button id="date-new-topic-btn">换个话题</button>
+                    </div>
+                    <div id="date-chat-area"></div>
+                    <div class="date-chat-input">
+                        <input type="text" id="date-input" placeholder="说点什么..." autocomplete="off">
+                        <button id="date-send-btn">发送</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="gift-terminal-panel" class="hidden">
+        <div class="gift-terminal-inner">
+            <div class="gift-terminal-sidebar">
+                <div class="terminal-brand">
+                    <div class="terminal-logo">📥</div>
+                    <div>
+                        <h3>购物终端</h3>
+                        <span>泰古通达物流速递</span>
+                    </div>
+                </div>
+                <button class="gift-terminal-tab active" id="gift-gift-category">
+                    <span class="terminal-tab-icon">🎁</span>
+                    <span>礼物</span>
+                </button>
+                <div class="terminal-sidebar-note">世界树公司-万能商品供应终端</div>
+            </div>
+            <div class="gift-terminal-main">
+                <div class="gift-terminal-header">
+                    <div>
+                        <h3>🛍️ 礼物定制与购买</h3>
+                        <span>自由生成送给恋人的礼物！我们会根据您的描述，进行礼物定制与估价。</span>
+                    </div>
+                    <div class="gift-terminal-header-actions">
+                        <span id="gift-balance">余额：🪙 40,000</span>
+                        <button id="gift-terminal-close">关闭</button>
+                    </div>
+                </div>
+                <div class="gift-terminal-body">
+                    <div class="gift-compose-card">
+                        <div class="gift-section-label">礼物描述</div>
+                        <textarea id="gift-description" maxlength="300" placeholder="例如：一只会发光的蓝色小熊挂件，里面藏着分析员写给芙提雅的短笺。"></textarea>
+                        <div class="gift-terminal-actions">
+                            <button id="gift-evaluate-btn">开始定制</button>
+                            <div id="gift-status"></div>
+                        </div>
+                    </div>
+                    <div id="gift-pending" class="gift-pending hidden">
+                        <div>
+                            <div class="gift-section-label">付款确认</div>
+                            <p>尊敬的分析员：您的礼物已定制完成。付款后将赠送给芙提雅女士。</p>
+                        </div>
+                        <button id="gift-pay-btn">支付</button>
+                    </div>
+                    <div id="gift-result" class="gift-result hidden"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="gift-collection-panel" class="hidden">
+        <div class="gift-collection-inner">
+            <div class="gift-collection-header">
+                <h3>🗄️ 礼物收藏柜</h3>
+                <button id="gift-collection-close">关闭</button>
+            </div>
+            <div id="gift-collection-list"></div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js?v=20260618-gift-stream"></script>
+</body>
+</html>
