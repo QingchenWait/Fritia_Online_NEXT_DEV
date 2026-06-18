@@ -67,7 +67,8 @@ export function createRoom(scene) {
 
     // Coordinate convention: the original 6m x 5m bedroom occupies X [-3, 3], Z [-2.5, 2.5].
     // The dream room is attached to the shopping-terminal wall on +X and occupies X [3, 13], Z [-3, 3].
-    // The shared wall is segmented so the passage at X=3 remains physically open.
+    // Shared-wall convention: the bedroom face stays almost flush at X=3, while extra thickness grows into +X.
+    // The sliding door moves along Z into the negative-Z wall segment, so the wall itself acts as the door pocket.
     const sharedDoor = {
         centerZ: 0.65,
         minZ: 0.05,
@@ -75,30 +76,121 @@ export function createRoom(scene) {
         width: 1.2,
         height: 2.25
     };
+    const sharedWallBedroomFaceX = 2.995;
+    const sharedWallDreamFaceX = 3.30;
+    const sharedWallCenterX = (sharedWallBedroomFaceX + sharedWallDreamFaceX) / 2;
+    const sharedWallThickness = sharedWallDreamFaceX - sharedWallBedroomFaceX;
 
-    function addSharedWallSegment(zMin, zMax) {
+    function addSharedWallBlock(zMin, zMax, yMin = 0, yMax = 3) {
         const length = zMax - zMin;
-        if (length <= 0.05) return;
-        const wall = new THREE.Mesh(new THREE.PlaneGeometry(length, 3), wallMat);
-        wall.position.set(3, 1.5, (zMin + zMax) / 2);
-        wall.rotation.y = -Math.PI / 2;
+        const height = yMax - yMin;
+        if (length <= 0.05 || height <= 0.05) return;
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(sharedWallThickness, height, length), wallMat);
+        wall.position.set(sharedWallCenterX, yMin + height / 2, (zMin + zMax) / 2);
         wall.receiveShadow = true;
         group.add(wall);
     }
 
-    addSharedWallSegment(-2.5, sharedDoor.minZ);
-    addSharedWallSegment(sharedDoor.maxZ, 2.5);
+    addSharedWallBlock(-3, sharedDoor.minZ);
+    addSharedWallBlock(sharedDoor.maxZ, 3);
+    addSharedWallBlock(sharedDoor.minZ, sharedDoor.maxZ, sharedDoor.height, 3);
 
     const sharedDoorFrameMat = new THREE.MeshStandardMaterial({ color: 0x252f3f, roughness: 0.45, metalness: 0.18 });
-    const sharedDoorFrameA = new THREE.Mesh(new THREE.BoxGeometry(0.12, sharedDoor.height, 0.07), sharedDoorFrameMat);
-    sharedDoorFrameA.position.set(3.02, sharedDoor.height / 2, sharedDoor.minZ - 0.04);
-    group.add(sharedDoorFrameA);
-    const sharedDoorFrameB = sharedDoorFrameA.clone();
-    sharedDoorFrameB.position.z = sharedDoor.maxZ + 0.04;
-    group.add(sharedDoorFrameB);
-    const sharedDoorFrameTop = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, sharedDoor.width + 0.18), sharedDoorFrameMat);
-    sharedDoorFrameTop.position.set(3.02, sharedDoor.height + 0.04, sharedDoor.centerZ);
-    group.add(sharedDoorFrameTop);
+    function addDoorFrameTrim(x, outwardSign) {
+        const frameThickness = 0.035;
+        const frameDepth = 0.07;
+        const frameX = x + outwardSign * frameThickness / 2;
+        const sideA = new THREE.Mesh(new THREE.BoxGeometry(frameThickness, sharedDoor.height, frameDepth), sharedDoorFrameMat);
+        sideA.position.set(frameX, sharedDoor.height / 2, sharedDoor.minZ - 0.04);
+        group.add(sideA);
+        const sideB = sideA.clone();
+        sideB.position.z = sharedDoor.maxZ + 0.04;
+        group.add(sideB);
+        const top = new THREE.Mesh(new THREE.BoxGeometry(frameThickness, 0.07, sharedDoor.width + 0.18), sharedDoorFrameMat);
+        top.position.set(frameX, sharedDoor.height + 0.035, sharedDoor.centerZ);
+        group.add(top);
+    }
+    addDoorFrameTrim(sharedWallBedroomFaceX, -1);
+    addDoorFrameTrim(sharedWallDreamFaceX, 1);
+
+    const dreamDoorHeight = sharedDoor.height - 0.015;
+    const dreamDoorX = 3.08;
+    const dreamDoorClosedPosition = new THREE.Vector3(dreamDoorX, dreamDoorHeight / 2, sharedDoor.centerZ);
+    const dreamDoorOpenPosition = new THREE.Vector3(
+        dreamDoorX,
+        dreamDoorHeight / 2,
+        sharedDoor.minZ - sharedDoor.width / 2 - 0.88
+    );
+    const dreamDoorWoodCanvas = document.createElement('canvas');
+    dreamDoorWoodCanvas.width = 96;
+    dreamDoorWoodCanvas.height = 384;
+    const dreamDoorWoodCtx = dreamDoorWoodCanvas.getContext('2d');
+    dreamDoorWoodCtx.fillStyle = '#3b2a25';
+    dreamDoorWoodCtx.fillRect(0, 0, dreamDoorWoodCanvas.width, dreamDoorWoodCanvas.height);
+    for (let x = 0; x < dreamDoorWoodCanvas.width; x += 2) {
+        const wave = Math.sin(x * 0.23) * 12 + Math.sin(x * 0.071) * 18;
+        const alpha = 0.18 + ((x % 11) / 60);
+        dreamDoorWoodCtx.strokeStyle = `rgba(${74 + wave}, ${51 + wave * 0.4}, ${39 + wave * 0.25}, ${alpha})`;
+        dreamDoorWoodCtx.beginPath();
+        dreamDoorWoodCtx.moveTo(x + Math.sin(x) * 0.8, 0);
+        dreamDoorWoodCtx.lineTo(x + Math.sin(x * 0.05) * 3, dreamDoorWoodCanvas.height);
+        dreamDoorWoodCtx.stroke();
+    }
+    dreamDoorWoodCtx.fillStyle = 'rgba(22, 14, 11, 0.26)';
+    dreamDoorWoodCtx.fillRect(0, 0, 8, dreamDoorWoodCanvas.height);
+    dreamDoorWoodCtx.fillRect(dreamDoorWoodCanvas.width - 8, 0, 8, dreamDoorWoodCanvas.height);
+    const dreamDoorWoodTex = new THREE.CanvasTexture(dreamDoorWoodCanvas);
+    dreamDoorWoodTex.colorSpace = THREE.SRGBColorSpace;
+    dreamDoorWoodTex.wrapS = THREE.RepeatWrapping;
+    dreamDoorWoodTex.wrapT = THREE.RepeatWrapping;
+    const dreamDoorMat = new THREE.MeshStandardMaterial({
+        map: dreamDoorWoodTex,
+        color: 0xffffff,
+        roughness: 0.86,
+        metalness: 0.02
+    });
+    const dreamDoorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, dreamDoorHeight, sharedDoor.width), dreamDoorMat);
+    dreamDoorMesh.position.copy(dreamDoorClosedPosition);
+    dreamDoorMesh.castShadow = true;
+    dreamDoorMesh.receiveShadow = true;
+    dreamDoorMesh.userData.interactionCenter = new THREE.Vector3(dreamDoorX, 1.2, sharedDoor.centerZ);
+    group.add(dreamDoorMesh);
+
+    const stripeMat = new THREE.MeshStandardMaterial({
+        color: 0x221815,
+        roughness: 0.92,
+        metalness: 0.0
+    });
+    for (const zOffset of [-0.48, -0.34, -0.2, -0.06, 0.08, 0.22, 0.36, 0.5]) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.014, dreamDoorHeight * 0.9, 0.012), stripeMat);
+        stripe.position.set(-0.043, 0, zOffset);
+        dreamDoorMesh.add(stripe);
+    }
+    const goldLineMat = new THREE.MeshStandardMaterial({ color: 0xc7a45e, roughness: 0.62, metalness: 0.25 });
+    const dreamDoorGoldLine = new THREE.Mesh(new THREE.BoxGeometry(0.016, dreamDoorHeight * 0.72, 0.018), goldLineMat);
+    dreamDoorGoldLine.position.set(-0.045, -0.1, -0.24);
+    dreamDoorMesh.add(dreamDoorGoldLine);
+    const dreamDoorLogoTex = new THREE.TextureLoader().load('src/_logos/dream_wood_mark.svg');
+    const dreamDoorLogo = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.34, 0.34),
+        new THREE.MeshStandardMaterial({
+            map: dreamDoorLogoTex,
+            transparent: true,
+            roughness: 0.35,
+            side: THREE.DoubleSide
+        })
+    );
+    dreamDoorLogo.position.set(-0.047, 0.58, 0);
+    dreamDoorLogo.rotation.y = -Math.PI / 2;
+    dreamDoorMesh.add(dreamDoorLogo);
+
+    const dreamDoorInteractionMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, sharedDoor.height, sharedDoor.width + 0.18),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false })
+    );
+    dreamDoorInteractionMesh.position.set(3.03, sharedDoor.height / 2, sharedDoor.centerZ);
+    dreamDoorInteractionMesh.userData.interactionCenter = new THREE.Vector3(3.03, 1.2, sharedDoor.centerZ);
+    group.add(dreamDoorInteractionMesh);
 
     const ceilGeo = new THREE.PlaneGeometry(6, 5);
     const ceilMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
@@ -247,10 +339,10 @@ export function createRoom(scene) {
     );
     terminalGlow.position.set(-0.052, -0.32, 0);
     terminalGroup.add(terminalGlow);
-    terminalGroup.position.set(2.955, 1.55, -0.35);
+    terminalGroup.position.set(2.955, 1.55, -0.95);
     group.add(terminalGroup);
     const terminalMesh = terminalBody;
-    terminalMesh.userData.interactionCenter = new THREE.Vector3(2.955, 1.58, -0.35);
+    terminalMesh.userData.interactionCenter = new THREE.Vector3(2.955, 1.58, -0.95);
 
     // Dream room shell. It starts empty by design; dynamic furniture is injected by dream_system.js.
     const dreamRoomBounds = {
@@ -297,15 +389,6 @@ export function createRoom(scene) {
     dreamRightWall.rotation.y = -Math.PI / 2;
     dreamGroup.add(dreamRightWall);
 
-    const dreamSharedWallLower = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), wallMat);
-    dreamSharedWallLower.position.set(3.005, 1.5, -1.5);
-    dreamSharedWallLower.rotation.y = Math.PI / 2;
-    dreamGroup.add(dreamSharedWallLower);
-    const dreamSharedWallUpper = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 3), wallMat);
-    dreamSharedWallUpper.position.set(3.005, 1.5, 2.125);
-    dreamSharedWallUpper.rotation.y = Math.PI / 2;
-    dreamGroup.add(dreamSharedWallUpper);
-
     const dreamWindowMat = new THREE.MeshStandardMaterial({
         color: 0x9bd7ff,
         emissive: 0x5ab7ff,
@@ -333,14 +416,6 @@ export function createRoom(scene) {
     const dwMid = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.2, 0.05), dreamWindowFrameMat);
     dwMid.position.set(8.3, 1.78, -2.955);
     dreamGroup.add(dwMid);
-
-    const dreamAccent = new THREE.Mesh(
-        new THREE.PlaneGeometry(2.0, 0.28),
-        new THREE.MeshStandardMaterial({ color: 0x78f1ff, emissive: 0x31bfff, emissiveIntensity: 0.28, transparent: true, opacity: 0.72 })
-    );
-    dreamAccent.position.set(3.012, 2.55, sharedDoor.centerZ);
-    dreamAccent.rotation.y = Math.PI / 2;
-    dreamGroup.add(dreamAccent);
 
     const dreamTerminalGroup = new THREE.Group();
     const dreamTerminalBodyMat = new THREE.MeshStandardMaterial({
@@ -391,10 +466,11 @@ export function createRoom(scene) {
     );
     dreamTerminalGlow.position.set(0.058, -0.35, 0);
     dreamTerminalGroup.add(dreamTerminalGlow);
-    dreamTerminalGroup.position.set(3.055, 1.5, -1.15);
+    dreamTerminalGroup.position.set(4.45, 1.5, 2.955);
+    dreamTerminalGroup.rotation.y = Math.PI / 2;
     dreamGroup.add(dreamTerminalGroup);
     const dreamTerminalMesh = dreamTerminalBody;
-    dreamTerminalMesh.userData.interactionCenter = new THREE.Vector3(3.055, 1.58, -1.15);
+    dreamTerminalMesh.userData.interactionCenter = new THREE.Vector3(4.45, 1.58, 2.955);
 
     group.add(dreamGroup);
 
@@ -458,21 +534,24 @@ export function createRoom(scene) {
     group.add(shelfGroup);
     colliders.push(makeAABB(-2.6, 0, 1.5, 0.45, 0.75, 0.22));
 
-    // Wall collisions (thick enough for player radius 0.25). The shared +X wall is split
-    // around sharedDoor so the old bedroom and dream room are connected by a passable opening.
+    // Wall collisions mirror the visual wall blocks. The shared wall uses the same thick
+    // segments as the mesh above, keeping the door opening physically passable.
+    const sharedWallColliders = [
+        makeCollider(sharedWallBedroomFaceX, 0, -3, sharedWallDreamFaceX, 3, sharedDoor.minZ),
+        makeCollider(sharedWallBedroomFaceX, 0, sharedDoor.maxZ, sharedWallDreamFaceX, 3, 3),
+        makeCollider(sharedWallBedroomFaceX, sharedDoor.height, sharedDoor.minZ, sharedWallDreamFaceX, 3, sharedDoor.maxZ)
+    ];
     const wallColliders = [
         makeCollider(-3.5, 0, -3.0, 3.5, 3, -2.4),
         makeCollider(-3.5, 0, 2.4, 3.5, 3, 3.0),
         makeCollider(-3.5, 0, -3.0, -2.9, 3, 3.0),
-        makeCollider(2.9, 0, -3.0, 3.5, 3, sharedDoor.minZ),
-        makeCollider(2.9, 0, sharedDoor.maxZ, 3.5, 3, 3.0),
         makeCollider(2.5, 0, -3.55, 13.5, 3, -2.9),
         makeCollider(2.5, 0, 2.9, 13.5, 3, 3.55),
         makeCollider(12.9, 0, -3.5, 13.5, 3, 3.5),
-        makeCollider(2.85, 0, -3.55, 3.45, 3, sharedDoor.minZ),
-        makeCollider(2.85, 0, sharedDoor.maxZ, 3.45, 3, 3.55)
+        ...sharedWallColliders
     ];
-    const playerColliders = [...colliders, ...wallColliders];
+    const dreamDoorCollider = makeCollider(sharedWallBedroomFaceX, 0, sharedDoor.minZ, sharedWallDreamFaceX, dreamDoorHeight, sharedDoor.maxZ);
+    const playerColliders = [...colliders, ...wallColliders, dreamDoorCollider];
 
     // Rug
     const rugGeo = new THREE.PlaneGeometry(2.0, 1.5);
@@ -540,10 +619,10 @@ export function createRoom(scene) {
     const wdHandle2 = wdHandle.clone();
     wdHandle2.position.x = 0.1;
     wardrobeGroup.add(wdHandle2);
-    wardrobeGroup.position.set(2.4, 0, 1.8);
+    wardrobeGroup.position.set(2.4, 0, 2.2);
     wardrobeGroup.rotation.y = Math.PI;
     group.add(wardrobeGroup);
-    colliders.push(makeAABB(2.4, 0, 1.8, 0.55, 1.05, 0.35));
+    colliders.push(makeAABB(2.4, 0, 2.2, 0.55, 1.05, 0.32));
     const wardrobeMesh = wdBody;
 
     const paintingZone = new THREE.Vector3(0, 0, 1.8);
@@ -627,6 +706,11 @@ export function createRoom(scene) {
         dreamRoomColliders,
         dreamRoomWaypoints,
         doorClearanceZone,
+        dreamDoorMesh,
+        dreamDoorInteractionMesh,
+        dreamDoorCollider,
+        dreamDoorClosedPosition,
+        dreamDoorOpenPosition,
         painting,
         paintingLabel,
         paintingZone,

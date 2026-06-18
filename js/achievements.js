@@ -94,6 +94,24 @@ const ACHIEVEMENTS = [
         complete: () => getCompletedDateLocationCount() >= 12
     },
     {
+        id: 'dream_love_nest',
+        title: '布置爱巢',
+        desc: '造梦空间内存在的自制家具达到 5 件。',
+        icon: 'src/_logos/ach_dream_love_nest.svg',
+        target: 5,
+        progress: () => Math.min(getDreamFurnitureCount(), 5),
+        complete: () => getDreamFurnitureCount() >= 5
+    },
+    {
+        id: 'dream_perfectionist',
+        title: '完美主义',
+        desc: '对同一件造梦家具完成至少 3 次造型修改。',
+        icon: 'src/_logos/ach_dream_perfectionist.svg',
+        target: 3,
+        progress: () => Math.min(getMaxDreamFurnitureRevisionCount(), 3),
+        complete: () => getMaxDreamFurnitureRevisionCount() >= 3
+    },
+    {
         id: 'dress_doll',
         title: '更衣人偶',
         desc: '使用过芙提雅的全部皮肤模型。',
@@ -273,6 +291,7 @@ function showAchievementToastOnce(achievement) {
 
 function showAchievementToast(achievement) {
     if (!els.toastHost) return;
+    playAchievementSound();
 
     const toast = document.createElement('div');
     toast.className = 'achievement-toast';
@@ -287,6 +306,14 @@ function showAchievementToast(achievement) {
     `;
     els.toastHost.appendChild(toast);
     setTimeout(() => toast.remove(), 4600);
+}
+
+function playAchievementSound() {
+    try {
+        const audio = new Audio('src/_voices/achievement_complete.mp3');
+        audio.volume = 0.82;
+        audio.play().catch(() => {});
+    } catch {}
 }
 
 function renderAchievementList() {
@@ -392,6 +419,26 @@ function getUsedModelCount() {
     const all = getAllModelPaths();
     const used = new Set(getStats().usedModelPaths);
     return all.filter(path => used.has(path)).length;
+}
+
+function getDreamFurnitureRecords() {
+    try {
+        const data = JSON.parse(localStorage.getItem('fritia_dream_furniture') || '[]');
+        return Array.isArray(data) ? data.filter(item => item && typeof item === 'object') : [];
+    } catch {
+        return [];
+    }
+}
+
+function getDreamFurnitureCount() {
+    return getDreamFurnitureRecords().length;
+}
+
+function getMaxDreamFurnitureRevisionCount() {
+    const recordMax = getDreamFurnitureRecords().reduce((max, item) => {
+        return Math.max(max, Math.round(Number(item.revisionCount) || 0));
+    }, 0);
+    return Math.max(recordMax, Math.round(Number(getStats().maxDreamFurnitureRevisionCount) || 0));
 }
 
 function getFirstTenDaysPassed() {

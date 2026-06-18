@@ -1,4 +1,3 @@
-const FURNITURE_MAX_TOKENS = 3200;
 const LINE_MAX_TOKENS = 256;
 const LINE_RETRY_MAX_TOKENS = 640;
 let cachedCharacterPrompt = null;
@@ -367,7 +366,6 @@ export async function requestDreamFurnitureSpec({ description, placementText, ro
         model: settings.model,
         stream: false,
         temperature: 0.35,
-        max_tokens: FURNITURE_MAX_TOKENS,
         messages: [
             {
                 role: 'system',
@@ -413,7 +411,6 @@ export async function requestDreamFurnitureRevision({ furniture, instruction, ro
         model: settings.model,
         stream: false,
         temperature: 0.28,
-        max_tokens: FURNITURE_MAX_TOKENS,
         messages: [
             {
                 role: 'system',

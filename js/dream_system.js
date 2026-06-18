@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { getSettings } from './settings.js';
 import {
+    addAffinity,
     addMoney,
     canAfford,
     formatGameDateTime,
@@ -8,6 +9,7 @@ import {
     getGameTimeContext,
     getGameTimeInfo,
     getMoney,
+    recordDreamFurnitureRevision,
     spendMoney
 } from './game_state.js';
 import { requestDreamFurnitureRevision, requestDreamFurnitureSpec, requestFurnitureRomanticLine } from './dream_llm.js';
@@ -64,10 +66,13 @@ let onFurnitureChanged = () => {};
 let getGameTimeText = () => formatGameDateTime({ includeYear: true });
 let getCharacterRoot = () => null;
 let canShowFurnitureDialogue = () => true;
+let getOcclusionColliders = () => [];
 
 const raycaster = new THREE.Raycaster();
+const occlusionRay = new THREE.Ray();
 const lookDirection = new THREE.Vector3();
 const lookTarget = new THREE.Vector3();
+const occlusionPoint = new THREE.Vector3();
 const furnitureRecords = [];
 const runtime = new Map();
 const els = {};
@@ -477,6 +482,9 @@ function renderBalance() {
         if (label) label.textContent = text;
         else els.balance.textContent = text;
     }
+    if (els.editorStyleBalance) {
+        els.editorStyleBalance.textContent = `余额：${formatMoney(getMoney())}`;
+    }
 }
 
 function closeById(id) {
@@ -497,6 +505,9 @@ export function initDreamSystem(options) {
     getGameTimeText = options.getGameTimeText || getGameTimeText;
     getCharacterRoot = options.getCharacterRoot || getCharacterRoot;
     canShowFurnitureDialogue = options.canShowFurnitureDialogue || canShowFurnitureDialogue;
+    getOcclusionColliders = typeof options.getOcclusionColliders === 'function'
+        ? options.getOcclusionColliders
+        : getOcclusionColliders;
 
     els.panel = document.getElementById('dream-terminal-panel');
     els.close = document.getElementById('dream-terminal-close');
@@ -514,6 +525,7 @@ export function initDreamSystem(options) {
     els.editorName = document.getElementById('dream-editor-name');
     els.editorStyleInstruction = document.getElementById('dream-editor-style-instruction');
     els.editorStyleButton = document.getElementById('dream-editor-style-apply');
+    els.editorStyleBalance = document.getElementById('dream-editor-style-balance');
     els.editorStyleProgress = document.getElementById('dream-editor-style-progress');
     els.editorStyleProgressFill = document.getElementById('dream-editor-style-progress-fill');
     els.editorStatus = document.getElementById('dream-editor-status');
@@ -534,7 +546,7 @@ export function initDreamSystem(options) {
     els.editorStyleButton?.addEventListener('click', handleStyleRevision);
     els.placementClose?.addEventListener('click', closePlacementEditPanel);
     document.getElementById('dream-editor-auto-place')?.addEventListener('click', handleAutoPlaceEdit);
-    document.getElementById('dream-editor-reset')?.addEventListener('click', resetEditingFurniture);
+    document.getElementById('dream-object-reset')?.addEventListener('click', resetEditingFurniture);
     bindMoveHold('dream-object-move-forward', 'forward');
     bindMoveHold('dream-object-move-back', 'back');
     bindMoveHold('dream-object-move-left', 'left');
@@ -703,10 +715,14 @@ export function isDreamRevisionPending() {
 
 export function isLookingAtDreamTerminal(activeCamera = camera) {
     if (!dreamTerminalMesh || !activeCamera) return false;
+    const centerZ = dreamTerminalMesh.userData?.interactionCenter?.z ?? dreamTerminalMesh.position.z;
+    if (activeCamera.position.z > centerZ - 0.02) return false;
     raycaster.setFromCamera(new THREE.Vector2(0, 0), activeCamera);
     const hits = raycaster.intersectObject(dreamTerminalMesh, true);
-    if (hits.length > 0) return true;
-    return isLookingAtObjectPoint(dreamTerminalMesh, activeCamera, 0.72, MAX_LOOK_DISTANCE);
+    if (hits.length > 0) return hasClearOcclusionLine(activeCamera, hits[0].point, hits[0].distance);
+    if (!isLookingAtObjectPoint(dreamTerminalMesh, activeCamera, 0.72, MAX_LOOK_DISTANCE)) return false;
+    getObjectInteractionPoint(dreamTerminalMesh, lookTarget);
+    return hasClearOcclusionLine(activeCamera, lookTarget, lookTarget.distanceTo(activeCamera.position));
 }
 
 export function isLookingAtDreamFurniture(activeCamera = camera) {
@@ -717,29 +733,84 @@ export function isLookingAtDreamFurniture(activeCamera = camera) {
 export function getLookingDreamFurniture(activeCamera = camera) {
     if (!activeCamera) return null;
     raycaster.setFromCamera(new THREE.Vector2(0, 0), activeCamera);
+    raycaster.far = MAX_LOOK_DISTANCE;
     const groups = Array.from(runtime.values()).map(item => item.group);
     const hits = raycaster.intersectObjects(groups, true);
     if (hits.length > 0) {
-        let obj = hits[0].object;
+        const hit = hits[0];
+        let obj = hit.object;
         while (obj && !obj.userData?.dreamFurnitureId) obj = obj.parent;
-        if (obj?.userData?.dreamFurnitureId) return obj.userData.dreamFurnitureId;
+        const furnitureId = obj?.userData?.dreamFurnitureId;
+        if (furnitureId && hasClearFurnitureLineOfSight(activeCamera, hit.point, hit.distance, furnitureId)) {
+            return furnitureId;
+        }
+        return null;
     }
 
     for (const item of runtime.values()) {
         if (isLookingAtObjectPoint(item.group, activeCamera, 0.85, MAX_LOOK_DISTANCE)) {
-            return item.id;
+            getObjectInteractionPoint(item.group, lookTarget);
+            const distance = lookTarget.distanceTo(activeCamera.position);
+            if (hasClearFurnitureLineOfSight(activeCamera, lookTarget, distance, item.id)) {
+                return item.id;
+            }
         }
     }
     return null;
 }
 
+function getObjectInteractionPoint(target, out) {
+    if (target.userData?.interactionCenter) {
+        out.copy(target.userData.interactionCenter);
+    } else {
+        target.getWorldPosition(out);
+    }
+    return out;
+}
+
+function getIgnoredFurnitureColliders(furnitureId) {
+    const item = runtime.get(furnitureId);
+    if (!item) return new Set();
+    return new Set([item.collider, ...(item.colliders || [])].filter(Boolean));
+}
+
+function hasClearFurnitureLineOfSight(activeCamera, targetPoint, targetDistance, furnitureId) {
+    if (!activeCamera || !targetPoint || !Number.isFinite(targetDistance) || targetDistance <= 0.001) return false;
+    occlusionRay.origin.copy(activeCamera.position);
+    occlusionRay.direction.copy(targetPoint).sub(activeCamera.position);
+    const rayLength = occlusionRay.direction.length();
+    if (rayLength <= 0.001) return false;
+    occlusionRay.direction.divideScalar(rayLength);
+
+    const ignoredColliders = getIgnoredFurnitureColliders(furnitureId);
+    return hasClearOcclusionLine(activeCamera, targetPoint, targetDistance, ignoredColliders);
+}
+
+function hasClearOcclusionLine(activeCamera, targetPoint, targetDistance, ignoredColliders = new Set()) {
+    if (!activeCamera || !targetPoint || !Number.isFinite(targetDistance) || targetDistance <= 0.001) return false;
+    occlusionRay.origin.copy(activeCamera.position);
+    occlusionRay.direction.copy(targetPoint).sub(activeCamera.position);
+    const rayLength = occlusionRay.direction.length();
+    if (rayLength <= 0.001) return false;
+    occlusionRay.direction.divideScalar(rayLength);
+
+    const colliders = typeof getOcclusionColliders === 'function' ? getOcclusionColliders() : [];
+    for (const collider of colliders) {
+        if (!collider || ignoredColliders.has(collider)) continue;
+        if (collider.containsPoint?.(targetPoint)) continue;
+        const hit = occlusionRay.intersectBox(collider, occlusionPoint);
+        if (!hit) continue;
+        const distance = hit.distanceTo(activeCamera.position);
+        if (distance > 0.04 && distance < targetDistance - 0.05) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function isLookingAtObjectPoint(target, activeCamera, radius = 0.5, maxDistance = 4) {
     if (!target || !activeCamera) return false;
-    if (target.userData?.interactionCenter) {
-        lookTarget.copy(target.userData.interactionCenter);
-    } else {
-        target.getWorldPosition(lookTarget);
-    }
+    getObjectInteractionPoint(target, lookTarget);
     activeCamera.getWorldDirection(lookDirection);
     const toTarget = lookTarget.sub(activeCamera.position);
     const distance = toTarget.length();
@@ -830,6 +901,7 @@ async function handleCreateFurniture() {
             createdAt: new Date().toISOString(),
             gameDateTime: getGameTimeText(),
             gameMinutes: timeInfo.totalMinutes,
+            revisionCount: 0,
             lastDialogueAt: 0
         };
 
@@ -852,6 +924,7 @@ async function handleCreateFurniture() {
         updateProgress(6, '完成');
         renderBalance();
         setStatus(`制造完成：${record.name} 已部署到造梦房间。`, 'ok');
+        addAffinity(5);
         if (els.description) els.description.value = '';
         if (els.placement) els.placement.value = '';
         onFurnitureChanged();
@@ -890,6 +963,7 @@ function openFurnitureEditPanel() {
     }
     if (els.editorName) els.editorName.value = record.name;
     if (els.editorStyleInstruction) els.editorStyleInstruction.value = '';
+    renderBalance();
     updateStyleRevisionProgress(false);
     setEditorStatus('');
     els.editor?.classList.remove('hidden');
@@ -1203,6 +1277,7 @@ async function handleStyleRevision() {
             setEditorStatus('扣款失败，样式修改已回滚。', 'warn');
             return;
         }
+        renderBalance();
 
         pendingRevision = {
             furnitureId: record.id,
@@ -1249,7 +1324,9 @@ export function confirmPendingDreamRevision() {
     if (!pendingRevision) return;
     const record = furnitureRecords.find(item => item.id === pendingRevision.furnitureId);
     if (record) {
+        record.revisionCount = Math.max(0, Math.round(Number(record.revisionCount) || 0)) + 1;
         saveFurniture();
+        recordDreamFurnitureRevision(record.revisionCount);
         onFurnitureChanged();
     }
     pendingRevision = null;
@@ -1336,6 +1413,7 @@ async function handleFurnitureVisited(event) {
     if (!canShowFurnitureDialogue()) return;
     const now = Date.now();
     if (now - (Number(record.lastDialogueAt) || 0) < DIALOGUE_COOLDOWN_MS) return;
+    if (!isCharacterBubbleInCameraView()) return;
 
     let line = '';
     const shouldCallLlm = Math.random() < FURNITURE_DIALOGUE_LLM_RATE;
@@ -1370,22 +1448,38 @@ function ensureCharacterBubble() {
     return bubble;
 }
 
-function updateCharacterBubblePosition() {
-    if (!els.characterBubble || els.characterBubble.classList.contains('hidden') || !camera) return;
+function getCharacterBubbleWorldPosition(out) {
     const root = getCharacterRoot?.();
-    if (!root) {
-        els.characterBubble.classList.add('hidden');
-        return;
-    }
+    if (!root) return false;
     root.updateMatrixWorld(true);
     const headBone = root.skeleton?.bones?.find(bone => /head|頭|头|闋/i.test(bone.name || ''));
     if (headBone) {
-        headBone.getWorldPosition(projectedBubblePosition);
-        projectedBubblePosition.y += 0.34;
+        headBone.getWorldPosition(out);
+        out.y += 0.34;
     } else {
         characterBubbleBox.setFromObject(root);
-        characterBubbleBox.getCenter(projectedBubblePosition);
-        projectedBubblePosition.y = characterBubbleBox.max.y + 0.28;
+        characterBubbleBox.getCenter(out);
+        out.y = characterBubbleBox.max.y + 0.28;
+    }
+    return true;
+}
+
+function isCharacterBubbleInCameraView() {
+    if (!camera || !getCharacterBubbleWorldPosition(projectedBubblePosition)) return false;
+    projectedBubblePosition.project(camera);
+    return projectedBubblePosition.z > -1
+        && projectedBubblePosition.z < 1
+        && projectedBubblePosition.x > -0.98
+        && projectedBubblePosition.x < 0.98
+        && projectedBubblePosition.y > -0.98
+        && projectedBubblePosition.y < 0.98;
+}
+
+function updateCharacterBubblePosition() {
+    if (!els.characterBubble || els.characterBubble.classList.contains('hidden') || !camera) return;
+    if (!getCharacterBubbleWorldPosition(projectedBubblePosition)) {
+        els.characterBubble.classList.add('hidden');
+        return;
     }
     projectedBubblePosition.project(camera);
     const x = THREE.MathUtils.clamp((projectedBubblePosition.x * 0.5 + 0.5) * window.innerWidth, 18, window.innerWidth - 18);
@@ -1403,6 +1497,7 @@ function stopCharacterBubbleProjection() {
 }
 
 function showCharacterSpeechBubble(line) {
+    if (!isCharacterBubbleInCameraView()) return;
     const bubble = ensureCharacterBubble();
     bubble.textContent = line;
     bubble.classList.remove('hidden', 'show');

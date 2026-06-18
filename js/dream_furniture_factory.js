@@ -10,6 +10,7 @@ const DEFAULT_COLOR = '#b8c7e8';
 const MAX_DIMENSIONS = { width: 4.2, depth: 3.2, height: 2.6 };
 const MIN_COMPONENT_SIZE = 0.03;
 const MAX_COMPONENT_SIZE = 4.2;
+const Z_FIGHTING_LAYER_STEP = 0.08;
 
 const MATERIAL_PRESETS = {
     wood: { roughness: 0.72, metalness: 0.03 },
@@ -67,7 +68,7 @@ function normalizeMaterialName(value) {
     return MATERIAL_PRESETS[key] ? key : 'default';
 }
 
-function makeMaterial(component) {
+function makeMaterial(component, renderLayer = 0) {
     const color = new THREE.Color(component.color);
     const preset = MATERIAL_PRESETS[component.material] || MATERIAL_PRESETS.default;
     const options = {
@@ -83,6 +84,11 @@ function makeMaterial(component) {
     }
 
     const mat = new THREE.MeshStandardMaterial(options);
+    if (!mat.transparent) {
+        mat.polygonOffset = true;
+        mat.polygonOffsetFactor = -1 - renderLayer * Z_FIGHTING_LAYER_STEP;
+        mat.polygonOffsetUnits = -1 - renderLayer * Z_FIGHTING_LAYER_STEP;
+    }
     if (component.material === 'light' || component.emissive) {
         mat.emissive = color.clone();
         mat.emissiveIntensity = clamp(component.emissiveIntensity ?? preset.emissiveIntensity ?? 0.45, 0, 1.5);
@@ -144,6 +150,36 @@ export function normalizeFurnitureSpec(rawSpec) {
         throw new Error(`家具组件数量不能超过 ${MAX_COMPONENTS}。`);
     }
 
+    // Component positions are center-based and +Y is up. During style revision the LLM often
+    // keeps the old furniture dimensions after adding objects on top of it, so expand the
+    // dimensions to fit the declared components before clamping component positions.
+    // If a fresh generation uses the furniture center as the local origin, preserve the
+    // component relationships and lift the entire furniture so the lowest point touches floor.
+    let minComponentY = Infinity;
+    let maxComponentY = -Infinity;
+    for (const component of rawComponents) {
+        const source = component && typeof component === 'object' ? component : {};
+        const fallbackSize = {
+            x: Math.min(dimensions.width, 0.5),
+            y: Math.min(dimensions.height, 0.5),
+            z: Math.min(dimensions.depth, 0.5)
+        };
+        const size = normalizeSize(source.size, fallbackSize);
+        const position = normalizeVec3(source.position, { x: 0, y: size.y / 2, z: 0 }, 5);
+        const bottomY = position.y - size.y / 2;
+        const topY = position.y + size.y / 2;
+        minComponentY = Math.min(minComponentY, bottomY);
+        maxComponentY = Math.max(maxComponentY, topY);
+        dimensions.width = clamp(Math.max(dimensions.width, Math.abs(position.x) * 2 + size.x), 0.2, MAX_DIMENSIONS.width);
+        dimensions.depth = clamp(Math.max(dimensions.depth, Math.abs(position.z) * 2 + size.z), 0.2, MAX_DIMENSIONS.depth);
+        dimensions.height = clamp(Math.max(dimensions.height, topY), 0.15, MAX_DIMENSIONS.height);
+    }
+
+    const verticalShift = Number.isFinite(minComponentY) && minComponentY < 0 ? -minComponentY : 0;
+    if (Number.isFinite(maxComponentY)) {
+        dimensions.height = clamp(Math.max(dimensions.height, maxComponentY + verticalShift), 0.15, MAX_DIMENSIONS.height);
+    }
+
     const components = rawComponents.map((component, index) => {
         const source = component && typeof component === 'object' ? component : {};
         const type = ALLOWED_PRIMITIVES.has(source.type) ? source.type : 'box';
@@ -160,6 +196,7 @@ export function normalizeFurnitureSpec(rawSpec) {
         const halfX = Math.max(0, dimensions.width / 2 - size.x / 2);
         const halfZ = Math.max(0, dimensions.depth / 2 - size.z / 2);
         const position = normalizeVec3(source.position, { x: 0, y: size.y / 2, z: 0 }, 5);
+        position.y += verticalShift;
         position.x = clamp(position.x, -halfX, halfX);
         position.y = clamp(position.y, size.y / 2, Math.max(size.y / 2, dimensions.height - size.y / 2));
         position.z = clamp(position.z, -halfZ, halfZ);
@@ -298,8 +335,8 @@ export function createFurnitureFromSpec(rawSpec) {
     group.userData.dreamSpec = spec;
     group.userData.interactionCenter = new THREE.Vector3(0, Math.min(1.4, spec.dimensions.height * 0.65), 0);
 
-    for (const component of spec.components) {
-        const mesh = new THREE.Mesh(createGeometry(component), makeMaterial(component));
+    for (const [index, component] of spec.components.entries()) {
+        const mesh = new THREE.Mesh(createGeometry(component), makeMaterial(component, index));
         mesh.name = component.name;
         mesh.position.set(component.position.x, component.position.y, component.position.z);
         mesh.rotation.set(component.rotation.x, component.rotation.y, component.rotation.z);
@@ -379,6 +416,7 @@ export function serializeFurniture(furniture) {
         pose: furniture.pose,
         createdAt: furniture.createdAt,
         gameDateTime: furniture.gameDateTime,
+        revisionCount: Math.max(0, Math.round(Number(furniture.revisionCount) || 0)),
         lastDialogueAt: furniture.lastDialogueAt || 0
     };
 }
@@ -405,6 +443,7 @@ export function deserializeFurniture(data) {
         },
         createdAt: String(data.createdAt || new Date().toISOString()),
         gameDateTime: String(data.gameDateTime || ''),
+        revisionCount: Math.max(0, Math.round(Number(data.revisionCount) || 0)),
         lastDialogueAt: Math.max(0, Number(data.lastDialogueAt) || 0)
     };
 }

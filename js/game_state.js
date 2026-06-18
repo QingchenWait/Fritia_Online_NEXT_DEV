@@ -44,7 +44,8 @@ function createDefaultStats() {
         dateInteractionLocations: [],
         usedModelPaths: [DEFAULT_MODELS[0]],
         smallTeacherStartsWithGanShenme: 0,
-        headPatCount: 0
+        headPatCount: 0,
+        maxDreamFurnitureRevisionCount: 0
     };
 }
 
@@ -62,7 +63,8 @@ function normalizeStats(data = {}) {
         dateInteractionLocations: [...new Set(list(data.dateInteractionLocations))],
         usedModelPaths: [...new Set([...defaults.usedModelPaths, ...list(data.usedModelPaths)])],
         smallTeacherStartsWithGanShenme: Math.max(0, Math.round(Number(data.smallTeacherStartsWithGanShenme) || 0)),
-        headPatCount: Math.max(0, Math.round(Number(data.headPatCount) || 0))
+        headPatCount: Math.max(0, Math.round(Number(data.headPatCount) || 0)),
+        maxDreamFurnitureRevisionCount: Math.max(0, Math.round(Number(data.maxDreamFurnitureRevisionCount) || 0))
     };
 }
 
@@ -306,6 +308,14 @@ export function recordHeadPat() {
     dispatchStatsUpdated();
 }
 
+export function recordDreamFurnitureRevision(count) {
+    const value = Math.max(0, Math.round(Number(count) || 0));
+    if (value <= state.stats.maxDreamFurnitureRevisionCount) return;
+    state.stats.maxDreamFurnitureRevisionCount = value;
+    saveState();
+    dispatchStatsUpdated();
+}
+
 function dispatchStatsUpdated() {
     if (typeof document !== 'undefined') {
         document.dispatchEvent(new CustomEvent('fritia-game-state-updated'));
@@ -459,7 +469,8 @@ function mergeStats(current, imported) {
         dateInteractionLocations: [...new Set([...current.dateInteractionLocations, ...imported.dateInteractionLocations])],
         usedModelPaths: [...new Set([...current.usedModelPaths, ...imported.usedModelPaths])],
         smallTeacherStartsWithGanShenme: Math.max(current.smallTeacherStartsWithGanShenme, imported.smallTeacherStartsWithGanShenme),
-        headPatCount: Math.max(current.headPatCount, imported.headPatCount)
+        headPatCount: Math.max(current.headPatCount, imported.headPatCount),
+        maxDreamFurnitureRevisionCount: Math.max(current.maxDreamFurnitureRevisionCount, imported.maxDreamFurnitureRevisionCount)
     };
 }
 

@@ -1,234 +1,489 @@
-﻿# DEVELOP.md 鈥?鑺欐彁闆?Online NEXT 寮€鍙戞枃妗?
-## 椤圭洰姒傝堪
+# Fritia Online NEXT 开发文档
 
-鍩轰簬 Three.js 鐨勯潤鎬佺綉椤?3D 瑙掕壊浜掑姩搴旂敤锛屾覆鏌?PMX 鏍煎紡鐨勮姍鎻愰泤锛團ritia锛夎鑹叉ā鍨嬶紝
-鏀寔瑙掕壊鑷姩琛屼负锛堣蛋鍔ㄣ€佸潗涓嬨€佺湪鐪硷級銆佺涓€浜虹О鎴块棿婕父銆丩LM 瀵硅瘽銆佹崲瑁呯瓑鍔熻兘銆?
----
+更新时间：2026-06-19
 
-## 鏂囦欢缁撴瀯
+本文是当前静态 Three.js 项目的开发事实源。项目不依赖后端服务，所有游戏数据、设置、历史、成就和造梦家具都存储在浏览器 `localStorage` 中，并通过前端导出/导入 JSON 机制迁移。
 
+## 项目概览
+
+Fritia Online NEXT 是一个纯静态网页 3D 互动应用：
+
+- 渲染引擎：Three.js ES Modules。
+- 角色模型：PMX/MMD，使用 `MMDLoader` 加载。
+- 控制方式：桌面端 Pointer Lock 第一人称控制，移动端触控摇杆与视角滑动。
+- 对话能力：复用设置面板中的 OpenAI 兼容 `chat/completions` API。
+- 数据存储：`localStorage`，导出/导入 JSON。
+- 启动方式：`npm run dev`，默认等价于 `npx serve . -p 3000 --cors`。
+
+禁止事项：
+
+- 不新增后端服务。
+- 不新增独立 API Key 配置。
+- 不执行 LLM 输出，不使用 `eval`、`new Function` 或动态执行字符串。
+- LLM 只能返回结构化文本或 JSON，前端必须本地校验和构建 Three.js 实体。
+
+## 文件结构
+
+```text
+fritia_online_v3/
+├── AGENTS.md
+├── DEVELOP.md
+├── README.md
+├── index.html
+├── package.json
+├── css/
+│   └── style.css
+├── js/
+│   ├── achievements.js
+│   ├── character.js
+│   ├── controls.js
+│   ├── date_dialogue.js
+│   ├── dialogue.js
+│   ├── dream_furniture_factory.js
+│   ├── dream_llm.js
+│   ├── dream_system.js
+│   ├── game_state.js
+│   ├── gift_system.js
+│   ├── main.js
+│   ├── room.js
+│   ├── scene.js
+│   └── settings.js
+└── src/
+    ├── snowbreak_logo.png
+    ├── sample_screenshot.png
+    ├── _queries/
+    │   ├── system_prompt.txt
+    │   └── date_prompt.txt
+    ├── _voices/
+    │   ├── startup_1.wav
+    │   ├── talk_1.mp3 ... talk_5.mp3
+    │   ├── sleep_mode_1.mp3 ... sleep_mode_2.mp3
+    │   ├── sleep_whisper_1.mp3 ... sleep_whisper_5.mp3
+    │   └── achievement_complete.mp3
+    ├── _logos/
+    │   ├── Profile_Fritia.png
+    │   ├── achievement_*.svg / ach_*.svg
+    │   ├── dream_*.svg
+    │   └── license files
+    ├── _fritia_3d_model/
+    └── _fritia_alterable_models/
 ```
-fritia_online_v2/
-鈹溾攢鈹€ index.html                    # 鍏ュ彛 HTML锛屽寘鍚墍鏈?UI 鍏冪礌
-鈹溾攢鈹€ css/
-鈹?  鈹斺攢鈹€ style.css                 # 鍏ㄥ眬鏍峰紡
-鈹溾攢鈹€ js/
-鈹?  鈹溾攢鈹€ main.js                   # 搴旂敤鍏ュ彛锛屽垵濮嬪寲娴佺▼ & 涓诲惊鐜?鈹?  鈹溾攢鈹€ scene.js                  # Three.js 鍦烘櫙銆佺浉鏈恒€佺伅鍏夈€佹覆鏌撳櫒
-鈹?  鈹溾攢鈹€ room.js                   # 鎴块棿鍑犱綍浣撱€佸鍏枫€佺鎾炰綋銆佽矾寰勭偣
-鈹?  鈹溾攢鈹€ character.js              # PMX 瑙掕壊鍔犺浇銆佹潗璐ㄨ浆鎹€侀楠煎姩鐢汇€佺姸鎬佹満
-鈹?  鈹溾攢鈹€ controls.js               # 绗竴浜虹О鎺у埗鍣?& 绉诲姩绔Е鎽告敮鎸?鈹?  鈹溾攢鈹€ dialogue.js               # LLM 瀵硅瘽绯荤粺锛圤penAI 鍏煎 API 娴佸紡浼犺緭锛?鈹?  鈹斺攢鈹€ settings.js               # 鐢ㄦ埛璁剧疆鎸佷箙鍖栵紙localStorage锛?鈹溾攢鈹€ src/
-鈹?  鈹溾攢鈹€ _fritia_3d_model/         # 榛樿妯″瀷锛氭瘺缁掓淳瀵?鈹?  鈹溾攢鈹€ _fritia_alterable_models/ # 鍙崲瑁呮ā鍨嬶紙4 濂楋級
-鈹?  鈹?  鈹溾攢鈹€ sweety_straw/         # 鑽夎帗鐢滃績
-鈹?  鈹?  鈹溾攢鈹€ cyan_leaf/            # 闈掑彾瀵嗚９
-鈹?  鈹?  鈹溾攢鈹€ pool_guard/           # 娉虫睜鎶ゅ崼
-鈹?  鈹?  鈹斺攢鈹€ small_king/           # 鍥戒富椹惧埌
-鈹?  鈹斺攢鈹€ _voices/                  # 璇煶鏂囦欢锛坰tartup_*.wav锛?鈹溾攢鈹€ package.json
-鈹斺攢鈹€ LICENSE
-```
 
----
+## 运行方式
 
-## 妯″潡鍔熻兘璇﹁В
-
-### `js/main.js` 鈥?搴旂敤鍏ュ彛
-
-| 鍔熻兘 | 璇存槑 |
-|------|------|
-| `init()` | 寮傛鍒濆鍖栨祦绋嬶細鍦烘櫙 鈫?鎴块棿 鈫?瑙掕壊 鈫?鎺у埗 鈫?瀵硅瘽 鈫?UI |
-| `animate()` | 涓绘覆鏌撳惊鐜紙requestAnimationFrame锛夛紝鏇存柊鎺у埗銆佽鑹层€佹覆鏌?|
-| `onKeyDown()` | 鍏ㄥ眬閿洏浜嬩欢锛欶 浜や簰銆丒 鎹㈢敾/鎹㈣銆丒SC 閫€鍑?|
-| `initPainting()` | 鎸傜敾涓婁紶涓?localStorage 鎸佷箙鍖?|
-| `openModelSelector()` / `closeModelSelector()` | 鎹㈣闈㈡澘 UI |
-| `selectModel()` | 璋冪敤 `swapModel()` 鍒囨崲瑙掕壊妯″瀷 |
-| `playStartupVoice()` | 棣栨浜や簰鏃舵挱鏀鹃殢鏈鸿闊?|
-
-### `js/scene.js` 鈥?鍦烘櫙鍒濆鍖?
-| 鍏冪礌 | 閰嶇疆 |
-|------|------|
-| 娓叉煋鍣?| WebGLRenderer, PCFSoftShadowMap, SRGBColorSpace |
-| 鐩告満 | PerspectiveCamera(65掳), 鍒濆浣嶇疆 (0, 1.6, 1.5) |
-| 鐜鍏?| AmbientLight(0xfff0e0, 0.5) |
-| 涓诲厜婧?| DirectionalLight(0xfff5e6, 0.9), 鎶曞皠闃村奖, 2048脳2048 shadowMap |
-| 鍙扮伅 | PointLight(0xffd080, 0.5, 5m), 鎶曞皠闃村奖, 512脳512 |
-| 绐楀厜 | RectAreaLight(0x88bbff, 0.4) |
-| 鑳屾櫙 | 0x1a1a2e + 闆炬晥 |
-
-### `js/room.js` 鈥?鎴块棿鏋勫缓
-
-- 6脳5m 鎴块棿锛屽洓闈㈠ + 澶╄姳鏉?+ 鍦版澘
-- 瀹跺叿锛氬簥锛堝乏渚э級銆佷功妗?+ 妞呭瓙锛堝彸渚у墠锛夈€佷功鏋讹紙鍙充晶鍚庯級銆佽。鏌滐紙鍙充晶鍚庯級銆佺獥鎴凤紙鍚庡锛夈€佹寕鐢伙紙鍓嶅锛?- 纰版挒绯荤粺锛氭墍鏈夊鍏峰拰澧欏鐢熸垚 AABB 纰版挒鐩?- 璺緞鐐圭郴缁燂細6 涓矾寰勭偣锛堜腑蹇冦€佺獥鎴枫€侀棬鍙ｃ€佷功鏋躲€佸簥銆佹瀛愶級锛屽叾涓簥鍜屾瀛愭爣璁颁负 `isFurniture: true` 鐢ㄤ簬鍧愪笅閫昏緫
-
-### `js/character.js` 鈥?瑙掕壊绯荤粺锛堟牳蹇冩ā鍧楋級
-
-#### PMX 鍔犺浇涓庢潗璐ㄨ浆鎹?
-- 浣跨敤 `MMDLoader` 鍔犺浇 PMX 妯″瀷
-- 灏嗗師濮?PMX 鏉愯川杞崲涓?`MeshToonMaterial`锛堝崱閫氭覆鏌撻鏍硷級
-- 鏉愯川杞崲绛栫暐锛堜笁绉嶆儏鍐碉級锛?  1. **AlphaTest 鏉愯川**锛堟湁 `alphaTest > 0`锛夛細浣跨敤 `alphaTest` 纭竟缂樿鍒囷紝涓嶉€忔槑
-  2. **鍗婇€忔槑鏉愯川**锛坄transparent = true` 鎴?`opacity < 1`锛夛細鍚敤 alpha blending锛宍depthWrite = false`锛宍DoubleSide` 娓叉煋
-  3. **涓嶉€忔槑鏉愯川**锛氭爣鍑嗕笉閫忔槑娓叉煋
-- 澶村彂鏉愯川锛堝悕绉板尮閰?`hair`/`楂猔/`澶村彂`锛夛細浣跨敤 `alphaTest` 瑁佸垏娓叉煋锛屽弻闈㈡覆鏌?
-#### 楠ㄩ绯荤粺
-
-- 楠ㄩ鏄犲皠琛?`BONE_MAP`锛氭敮鎸佹棩鏂?鑻辨枃楠ㄩ鍚?- 鏀寔鐨勯楠硷細涓績銆佽剨鏌泵?銆佸ご銆佸乏鍙宠偐銆佸乏鍙宠偐C銆佸乏鍙宠噦銆佸乏鍙宠倶銆佸乏鍙宠吙銆佸乏鍙宠啙銆佸乏鍙宠笣
-- 姣忓抚璋冪敤 `forceUpdate()` 寮哄埗鏇存柊楠ㄩ鐭╅樀
-
-#### 瑙掕壊鐘舵€佹満
-
-| 鐘舵€?| 璇存槑 |
-|------|------|
-| `IDLE` | 闈欐绔欑珛锛屽懠鍚稿姩鐢伙紝闅忔満鏃堕棿鍚庡垏鎹㈠埌璧拌矾 |
-| `WALKING` | 娌胯矾寰勭偣琛岃蛋锛屾琛屽懆鏈熷姩鐢伙紝纰版挒妫€娴?|
-| `TURNING_TO_SIT` | 杞韩闈㈠悜瀹跺叿锛?.8s锛?|
-| `STAND_TO_SIT` | 绔欑珛鈫掑潗涓嬪Э鎬佽繃娓★紙1.2s锛?|
-| `SITTING` | 鍧愬Э闈欐锛屽懠鍚稿姩鐢伙紝闅忔満鏃堕棿鍚庤捣绔?|
-| `SIT_TO_STAND` | 鍧愪笅鈫掔珯绔嬭繃娓★紙1.2s锛?|
-| `WAVING` | 鎸ユ墜鍔ㄧ敾锛堥娆＄偣鍑绘椂瑙﹀彂锛?.5s锛?|
-| `INTERACTING` | 瀵硅瘽妯″紡锛氬ご閮ㄨ拷韪帺瀹朵綅缃?|
-
-#### 鐫＄湢妯″紡
-
-- 瑙﹀彂锛氬噯鏄熷鍑嗗簥鎸?E锛堥€氳繃 `isLookingAtBed()` 灏勭嚎妫€娴?`bedMesh`锛?- 杩涘叆锛歚fadeToBlack()` 鈫?淇濆瓨鐩告満鐘舵€?鈫?绉诲姩瑙掕壊鍒板簥浣嶇疆 鈫?`applySleepingPose()` 鈫?闂溂锛坄blinkIndex = 1.0`锛夆啋 鐩告満绉诲埌搴婅竟锛堣繎璺濈韬哄Э瑙嗚锛夆啋 `fadeFromBlack()`
-- 閫€鍑猴細`fadeToBlack()` 鈫?鎭㈠鐩告満鐘舵€?鈫?閲嶇疆瑙掕壊浣嶇疆鍜屽Э鎬?鈫?`applyIdlePose()` 鈫?鐫佺溂 鈫?`fadeFromBlack()`
-- 鐫＄湢涓細WASD 绉诲姩绂佺敤锛坄controlsModule.update()` 璺宠繃锛夛紝浠呭厑璁搁紶鏍囪瑙掓棆杞?- 鐫＄湢濮挎€侊細鑴婃煴澶у箙鍚庝话 + 渚у€撅紝鍙岃吙寮洸锛屽ご閮ㄤ晶鍋忥紝妯℃嫙渚ц汉
-
-#### Morph Target
-
-- 鐪ㄧ溂锛氭悳绱?`銇俱伆銇熴亶` / `blink` / `鐪ㄧ溂`锛屽懆鏈?2~6s 闅忔満
-- 寰瑧锛氭悳绱?`绗戙亜` / `寰瑧銇縛 / `smile` / `銇仯銇撱倞`锛岄粯璁ゅ己搴?0.3
-
-### `js/controls.js` 鈥?绗竴浜虹О鎺у埗
-
-- `PointerLockControls`锛氱偣鍑婚攣瀹氶紶鏍囷紝ESC 瑙ｉ攣
-- WASD 绉诲姩 + 纰版挒妫€娴嬶紙0.25m 鍗婂緞鐞冧綋锛?- 绉诲姩绔敮鎸侊細铏氭嫙鎽囨潌 + 瑙︽懜瑙嗚鎺у埗
-- `isNearCharacter()`锛氳窛绂诲垽瀹氾紙2.5m 闃堝€硷級
-
-### `js/dialogue.js` 鈥?瀵硅瘽绯荤粺
-
-- OpenAI 鍏煎 API 娴佸紡璋冪敤锛圫SE锛?- 绯荤粺 Prompt锛氳姍鎻愰泤瑙掕壊璁惧畾锛堝彲鐖卞コ鍙嬶紝绠€鐭彛璇洖澶嶏級
-- 涓婁笅鏂囩獥鍙ｏ細鏈€杩?30 鏉℃秷鎭?- 鍙傛暟锛歵emperature=0.85, max_tokens=200
-
-### `js/settings.js` 鈥?璁剧疆绠＄悊
-
-- 鎸佷箙鍖栧瓨鍌細`localStorage` key = `fritia-settings`
-- 閰嶇疆椤癸細`apiKey`, `baseUrl`, `model`
-- 榛樿鍊硷細OpenAI API, gpt-4o-mini
-
----
-
-## 鎶€鏈爤
-
-| 缁勪欢 | 鐗堟湰/鎶€鏈?|
-|------|-----------|
-| 娓叉煋寮曟搸 | Three.js r169 (CDN importmap) |
-| 妯″瀷鏍煎紡 | PMX (MikuMikuDance) |
-| 鍔犺浇鍣?| MMDLoader (three/addons) |
-| 娓叉煋椋庢牸 | MeshToonMaterial (鍗￠€氭覆鏌? |
-| 瀵硅瘽 API | OpenAI 鍏煎 (娴佸紡 SSE) |
-| 閮ㄧ讲鏂瑰紡 | 绾潤鎬佺綉椤碉紝鏃犻渶鍚庣 |
-
----
-
-## 鍏抽敭璁捐鍐崇瓥
-
-### 鏉愯川杞崲绛栫暐
-
-PMX 鍘熷鏉愯川 鈫?MeshToonMaterial 杞崲鏃讹紝鍖哄垎涓夌閫忔槑妯″紡锛?1. **AlphaTest**锛氬師濮?`alphaTest > 0` 鏃朵娇鐢紝閫傚悎鏍戝彾/钑句笣绛夐晜绌烘潗璐?2. **Alpha Blending**锛氬師濮?`transparent = true` 鎴?`opacity < 1` 鏃朵娇鐢紝閫傚悎澶村彂绛夊崐閫忔槑鏉愯川
-3. **涓嶉€忔槑**锛氬叾浠栨儏鍐?
-澶村彂鍗婇€忔槑淇锛?026-06-17锛夛細
-- 鍘?bug锛歁MDLoader 涓嶈缃?`transparent = true`锛堝ご鍙戞潗璐?#24 `澶村彂`銆?25 `澶村彂1` 鍧囦负 `transparent: false, opacity: 1, alphaTest: 0`锛夛紝瀵艰嚧澶村彂绾圭悊 alpha 閫氶亾鏈浣跨敤
-- 淇锛氶€氳繃鏉愯川鍚嶅尮閰嶏紙`/hair|楂獆澶村彂/i`锛夎瘑鍒ご鍙戞潗璐紝浣跨敤 `alphaTest` 瑁佸垏娓叉煋锛圥MX 澶村彂绾圭悊鐨?alpha 閫氶亾鏄簩鍊肩殑锛氬ご鍙戜笣 = 1.0锛岀┖闅?= 0.0锛?- 淇2锛氭坊鍔?`setupTransparentShadows(mesh)` 鍑芥暟锛屼负浣跨敤 `alphaTest` 鐨勬潗璐ㄥ垱寤鸿嚜瀹氫箟娣卞害鐫€鑹插櫒锛坄customDepthMaterial`锛夛紝浣块槾褰辫创鍥惧皧閲?alpha 閫氶亾
-- 淇3锛氳嚜瀹氫箟娣卞害鐫€鑹插櫒浣跨敤 `#define USE_SKINNING` + Three.js 鐨?`skinning_pars_vertex` 瀹炵幇楠ㄩ鍔ㄧ敾鏀寔
-- 娉ㄦ剰锛歍hree.js 鐨?`depthPacking` 鍜?`skinning` 涓嶆槸 ShaderMaterial 鐨勫睘鎬э紝闇€瑕侀€氳繃鐫€鑹插櫒 define 鍜?uniforms 鎵嬪姩澶勭悊
-
-### 鐩告満涓庝氦浜?
-- 鍥哄畾楂樺害 1.6m锛堢涓€浜虹О瑙嗚锛?- PointerLock 鎺у埗锛孍SC 閫€鍑轰氦浜掓ā寮?- 璺濈闃堝€?2.5m 瑙﹀彂浜や簰鎻愮ず
-
-### 妯″瀷鑷姩琛屼负
-
-- 鍩轰簬璁℃椂鍣ㄧ殑鐘舵€佹満锛岄殢鏈烘椂闂磋Е鍙戠姸鎬佸垏鎹?- 鍧愪笅鍐峰嵈 5s锛岄槻姝㈠弽澶嶅潗涓?- 楠ㄩ鍔ㄧ敾锛氭墜鍔ㄨ绠?rotation锛岄潪鍔ㄧ敾鍓緫
-
----
-
-## 鏋勫缓涓庤繍琛?
 ```bash
-# 鏈湴寮€鍙戯紙闇€瑕佹湰鍦?HTTP 鏈嶅姟鍣紝鍥犱负 ES modules锛?npx serve .
-# 鎴?python -m http.server 8000
-
-# 鎵撳紑 http://localhost:8000
+npm run dev
 ```
 
-鏃犻渶鏋勫缓姝ラ锛岀洿鎺ユ祻瑙堝櫒鎵撳紑锛堥渶 HTTP 鏈嶅姟鍣ㄦ敮鎸?importmap锛夈€?
----
+本项目使用浏览器原生 ES module/importmap，必须通过 HTTP 服务访问，不能直接双击打开 HTML。
 
-## 閫犳ⅵ绯荤粺锛?026-06-18锛?
-閫犳ⅵ绯荤粺鏄?LLM 椹卞姩鐨勫鍏疯嚜涓诲垱閫犱笌鎴块棿甯冪疆妯″紡锛屼粛鐒舵槸绾潤鎬佸墠绔疄鐜帮紝涓嶆柊澧炲悗绔湇鍔°€?
-### 鏂板/淇敼妯″潡
+## 入口与主循环：`js/main.js`
 
-- `js/room.js`
-  - 鏃ф埧闂翠粛鍗犵敤 `X [-3, 3]`, `Z [-2.5, 2.5]`銆?  - 鏂板閫犳ⅵ鎴块棿浣嶄簬鏃ф埧鍙充晶 `+X`锛屽崰鐢?`X [3, 13]`, `Z [-3, 3]`锛岄潰绉害涓烘棫鎴?2 鍊嶃€?  - 鏃у彸澧欐寜杩炴帴闂ㄦ礊鍒嗘锛岄棬娲炰腑蹇冪害 `X=3, Z=0.65`锛岀帺瀹跺彲閫氳繃銆?  - 杩斿洖 `dreamTerminalMesh`, `oldRoomBounds`, `dreamRoomBounds`, `dreamRoomColliders`, `dreamRoomWaypoints`, `doorClearanceZone`, `dreamWindowMesh`銆?- `js/dream_furniture_factory.js`
-  - 鍙礋璐ｇ‘瀹氭€у鍏疯鏍兼牎楠屻€乶ormalize銆乸rimitive mesh 鏋勫缓銆丄ABB collider銆乸ose 搴旂敤鍜屽簭鍒楀寲銆?  - 鍏佽 primitive锛歚box`, `cylinder`, `sphere`, `cone`, `torus`, `plane`銆?  - 鍏佽绫诲埆锛歚seat`, `table`, `bed`, `storage`, `lighting`, `decor`, `plant`, `toy`, `custom`銆?  - 缁勪欢鏁伴噺闄愬埗 1-24锛涢鑹插繀椤绘槸 `#RRGGBB`锛岄潪娉曢鑹插洖閫€榛樿鑹诧紱鏉愯川鍙槧灏勬湰鍦?preset銆?- `js/dream_llm.js`
-  - 澶嶇敤 `settings.js` 鐨?`apiKey/baseUrl/model` 璋冪敤 OpenAI 鍏煎 `chat/completions`銆?  - `requestDreamFurnitureSpec()` 璇锋眰涓ユ牸瀹跺叿 JSON銆?  - `requestFurnitureRomanticLine()` 涓哄姩鎬佸鍏?waypoint 璁块棶鐢熸垚鐭亱鐖卞彴璇嶃€?  - 鍏煎 `application/json` 闈炴祦寮忓搷搴斿拰 SSE/鏂囨湰娴佸搷搴斻€?- `js/dream_system.js`
-  - 璐熻矗 UI銆佸埗閫犳祦绋嬨€佹憜鏀炬悳绱€佸け璐ユ彁绀恒€佹墸璐广€乴ocalStorage銆佸鍏ュ鍑恒€佸鍏峰揩鎹锋帶鍒躲€佸鍏风紪杈戙€佸姩鎬佺鎾炰綋銆佸姩鎬?waypoint銆佸鍏峰彴璇嶅喎鍗淬€?  - 鎴愭湰鍥哄畾 `500 鏁版嵁閲慲锛涘彧鏈夊鍏烽儴缃层€佹牎楠屽拰淇濆瓨鎴愬姛鍚庢墠璋冪敤 `spendMoney(500)`銆?  - 鍒犻櫎鑷埗瀹跺叿閫€鍥?`400 鏁版嵁閲慲銆?- `js/main.js`
-  - 鍒濆鍖栭€犳ⅵ绯荤粺銆?  - `KeyE` 澧炲姞鐪嬪悜閫犳ⅵ缁堢鎵撳紑鈥滃鍏峰竷缃€濄€佺湅鍚戣嚜鍒跺鍏锋墦寮€瀹跺叿绠＄悊銆?  - `updateInteractionPrompt()` 澶嶇敤 `#painting-prompt` 鏄剧ず `鎸?E 鎵撳紑閫犳ⅵ缁堢` / `鎸?E 绠＄悊瀹跺叿`銆?  - 瀵煎嚭 JSON 椤跺眰鍔犲叆 `dreamFurniture`锛涘鍏ユ椂鎸?id 鍚堝苟骞惰烦杩囧潖瀹跺叿銆?  - 鏍规嵁鐩告満浣嶇疆鍒囨崲鑺欐彁闆呭鑸綔鐢ㄥ煙锛氭棫鎴块棿鍜岄€犳ⅵ鎴块棿浜掓枼娲诲姩銆?- `js/character.js`
-  - 鏂板 `setCharacterNavigationScope(cd, scope)` 鍜?`forceCharacterIntoRoom(cd, roomId, spawnPosition)`銆?  - 鍒拌揪鍔ㄦ€佸鍏?waypoint 鏃舵淳鍙?`fritia-dream-furniture-visited`銆?- `js/controls.js`
-  - overlay 绠＄悊鍒楄〃鏂板 `dream-terminal-panel`, `dream-furniture-editor-panel`, `dream-object-controls`銆?  - 鏂板 `setColliders()`, `addColliders()`, `removeColliders()` 鐢ㄤ簬鍔ㄦ€佸鍏风鎾炲悓姝ャ€?  - 鏂板 `resolveCameraCollisions()`锛屽鍏风Щ鍔ㄥ埌鐜╁鑴氫笅鏃跺皢鐩告満姘村钩鎺ㄥ嚭纰版挒浣撱€?  - 鏂板 `setMovementLocked()` 鍜?`rotateView()`锛屽鍏峰揩鎹风鐞嗘椂鍏佽鎷栨嫿杞姩瑙嗚浣嗙鐢ㄧ帺瀹剁Щ鍔ㄣ€?- `src/_logos`
-  - 鏂板閫犳ⅵ缁堢鍜屽鍏峰揩鎹锋搷浣滃浘鏍囷細`dream_ai_core.svg`, `dream_blueprint.svg`, `dream_arrow_up.svg`, `dream_arrow_down.svg`, `dream_arrow_left.svg`, `dream_arrow_right.svg`, `dream_rotate_left.svg`, `dream_rotate_right.svg`, `dream_edit.svg`, `dream_coin.svg`銆?
-### DOM id
+职责：
 
-- 瀹跺叿甯冪疆娴眰锛歚#dream-terminal-panel`
-- 绐楀彛鏍囬锛歚閫犳ⅵ-瀹跺叿鎵撻€犵粓绔痐
-- 鍏抽棴鍥炬爣鎸夐挳锛歚#dream-terminal-close`
-- 瀹跺叿鎻忚堪杈撳叆锛歚#dream-furniture-description`
-- 鎽嗘斁浣嶇疆杈撳叆锛歚#dream-placement-input`
-- 鍒堕€犳寜閽細`#dream-create-button`
-- 闃舵鏂囨湰锛歚#dream-progress`
-- 杩涘害鏉★細`#dream-progress-fill`
-- 鐘舵€佹彁绀猴細`#dream-status`
-- 浣欓鏄剧ず锛歚#dream-balance`
-- 瀹跺叿瀹炰綋蹇嵎鎺у埗灞傦細`#dream-object-controls`
-- 蹇嵎绉诲姩鎸夐挳锛歚#dream-object-move-forward`, `#dream-object-move-back`, `#dream-object-move-left`, `#dream-object-move-right`
-- 蹇嵎鏃嬭浆鎸夐挳锛歚#dream-object-rotate-left`, `#dream-object-rotate-right`
-- 蹇嵎缂栬緫鎸夐挳锛歚#dream-object-edit`
-- 蹇嵎纭鎸夐挳锛歚#dream-object-close`
-- 涓诲睆骞曟皵娉℃彁绀猴細`#dream-screen-toast`
-- 瀹跺叿绠＄悊娴眰锛歚#dream-furniture-editor-panel`
-- 绠＄悊鍏抽棴鍥炬爣鎸夐挳锛歚#dream-editor-close`
-- 绠＄悊鏍囬锛歚#dream-editor-title`
-- 绠＄悊鍏冧俊鎭細`#dream-editor-meta`
-- 閲嶅懡鍚嶈緭鍏ワ細`#dream-editor-name`
-- 閲嶅懡鍚嶄繚瀛橈細`#dream-editor-save-name`
-- 鑷姩鎽嗘斁杈撳叆/鎸夐挳锛歚#dream-editor-placement`, `#dream-editor-auto-place`
-- 閲嶇疆/鍒犻櫎锛歚#dream-editor-reset`, `#dream-editor-delete`
-- 绠＄悊鐘舵€侊細`#dream-editor-status`
+- 初始化场景、房间、角色、控制器、对话、礼物、成就、造梦系统。
+- 管理主循环 `animate()`。
+- 统一处理 `E/F/Escape/1/2` 键位。
+- 更新 HUD、时间、昼夜窗户颜色、房间作用域。
+- 统一导出/导入项目数据。
+- 统一处理按 E 交互提示和视线遮挡判断。
 
-### localStorage 涓庡鍏ュ鍑?
-- 鏂?key锛歚fritia_dream_furniture`
-- 瀛樺偍鏍煎紡锛氭暟缁勶紝姣忛」鍖呭惈锛?  - `id`
-  - `name`
-  - `category`
-  - `description`
-  - `spec`
-  - `pose.position.x/y/z`
-  - `pose.rotationY`
-  - `createdAt`
-  - `gameDateTime`
-  - `lastDialogueAt`
-- 瀵煎嚭 JSON锛?  - 椤跺眰瀛楁 `dreamFurniture`
-  - `gameState.dreamFurniture` 涔熷寘鍚彧璇诲揩鐓э紝鏂逛究鏈潵鍏煎銆?- 瀵煎叆 JSON锛?  - 鏀寔 `data.dreamFurniture` 鎴?`data.gameState.dreamFurniture`銆?  - 鎸?`id` 鍘婚噸鍚堝苟銆?  - 鍗曚欢瀹跺叿 spec 鎭㈠澶辫触鎴栨憜鏀句笉瀹夊叏鏃惰烦杩囷紝涓嶅奖鍝嶆暣浣撳鍏ャ€?
-### 浜嬩欢鍚?
-- `fritia-overlay-closed`
-  - 閫犳ⅵ闈㈡澘鍏抽棴鏃?detail id 涓?`dream-terminal-panel`, `dream-furniture-editor-panel` 鎴?`dream-object-controls`銆?- `fritia-dream-furniture-visited`
-  - 瑙掕壊鍒拌揪鍔ㄦ€佸鍏?waypoint 鏃舵淳鍙戙€?  - detail 鍖呭惈 `furnitureId`, `name`, `description`, `category`, `dialogueTags`銆?- `fritia-game-state-updated`
-  - 鎴愬姛鎵ｈ垂鍚庣敱 `spendMoney()` 娲惧彂锛屼富娴佺▼鍒锋柊 HUD銆?  - `addMoney(amount, reason)` 浼氬湪 detail 涓甫 `moneyDelta`锛孒UD 鍦ㄦ暟鎹噾浣欓鍚庢樉绀?`+amount`銆?
-### LLM JSON 鍗忚
+关键状态：
 
-LLM 鍙兘杈撳嚭瀹跺叿瑙勬牸 JSON锛屼笉鍏佽杈撳嚭 Markdown銆佽В閲娿€佸閮?URL 鎴?JavaScript銆傚叧閿瓧娈碉細
+- `scene`, `camera`, `renderer`：Three.js 基础对象。
+- `controlsModule`：`controls.js` 返回的控制器接口。
+- `charData`：`character.js` 返回的角色运行态。
+- `isInteracting`：日常对话状态。
+- `isSleeping`：睡眠模式状态。
+- `currentPlayerRoomId`：`bedroom` 或 `dream`。
+- `isDreamDoorOpen`, `dreamDoorAnimating`：造梦空间推拉门状态。
+- `basePlayerColliders`, `bedroomColliders`, `dreamStaticColliders`：玩家和角色使用的基础碰撞体集合。
+
+主要函数：
+
+- `init()`：主初始化流程。按顺序初始化 `game_state`、`scene`、`room`、`character`、`controls`、对话系统、礼物系统、成就系统和造梦系统。
+- `onKeyDown(e)`：全局键盘交互。`E` 处理门、终端、家具、礼物、床、约会、挂画、衣柜；`F` 处理角色互动和摸头；`1/2` 处理造梦家具样式修改确认/回退。
+- `animate()`：主循环。更新游戏时间、控制器、角色、门动画、房间作用域、窗户天空色、交互提示并渲染场景。
+- 开局欢迎闸门：加载完成但玩家尚未点击 `#click-to-play` 前，角色只保留眨眼，不切换 waypoint、不随机移动；首次点击后先执行挥手欢迎，挥手结束再恢复正常行动。
+- `updateInteractionPrompt()`：复用 `#painting-prompt` 和 `#interaction-prompt` 显示当前可用交互；造梦家具显示 `按 E 管理 [家具名]`。
+- `hasClearLineOfSight(targetPoint, targetDistance)`：按 E 交互视线遮挡判断。玩家视角到目标点之间如果被当前碰撞体阻挡，则不显示也不触发按 E 管理/交互。睡眠模式的 `按 E 起床` 不走这个规则。
+- `isLookingAtTerminal()` / `isLookingAtDreamTerminal()` / `isLookingAtDreamDoor()` / `isLookingAtPainting()` 等：各类准星交互检测。
+- `toggleDreamDoor()`：切换造梦空间推拉门开关状态，并刷新玩家/角色碰撞作用域。
+- `updateDreamDoor(delta)`：用缓动插值滑动门板。门开启后移除门碰撞，门关闭后恢复门碰撞。
+- `refreshCharacterRoomScope(force)`：玩家进入新旧房间时，切换芙提雅导航作用域；优先让角色通过门步行进入对应房间，失败时才瞬移。
+- `getActivePlayerColliders()`：当前玩家碰撞体。门关闭时包含 `dreamDoorCollider`，门打开时移除。
+- `getActiveBedroomCharacterColliders()` / `getActiveDreamCharacterColliders()`：角色在不同房间的导航碰撞体。
+- `exportData()`：导出设置、游戏状态、日常对话、约会对话、成就、礼物、造梦家具、挂画。
+- `handleImportFile(e)`：导入 JSON，兼容旧存档，导入后刷新 HUD、成就、礼物、造梦家具。
+
+## 场景初始化：`js/scene.js`
+
+导出：
+
+- `initScene(canvas)`：创建 `Scene`、`PerspectiveCamera`、`WebGLRenderer`、基础光照和窗口 resize 逻辑。
+
+当前光照：
+
+- `AmbientLight(0xfff0e0, 0.5)`
+- `DirectionalLight(0xfff5e6, 0.9)`
+- 桌灯附近 `PointLight`
+- 老房间窗户附近 `RectAreaLight`
+
+注意：当前版本没有对新旧房间使用渲染 layer 或独立光照隔离。此前错误的光照实验已经回退。
+
+## 房间与静态几何：`js/room.js`
+
+导出：
+
+- `createRoom(scene)`：构建旧卧室、造梦空间、静态家具、碰撞体、交互对象、角色 waypoint，并把房间组加入场景。
+
+内部 helper：
+
+- `makeBox(w, h, d, color, x, y, z, castShadow)`：创建常规盒子 mesh。
+- `makeAABB(cx, cy, cz, hw, hh, hd)`：创建以中心点和半尺寸定义的 `Box3`。
+- `makeCollider(minX, minY, minZ, maxX, maxY, maxZ)`：创建直接坐标定义的 `Box3`。
+- `addSharedWallBlock(zMin, zMax, yMin, yMax)`：创建新旧房间共享厚墙分段。
+
+坐标约定：
+
+- 旧卧室：`X [-3, 3]`，`Z [-2.5, 2.5]`，高度 `Y [0, 3]`。
+- 造梦空间：在旧房间右侧 `+X`，`X [3, 13]`，`Z [-3, 3]`，高度 `Y [0, 3]`。
+- 连接门洞：共享墙 `X≈3`，门洞 `Z [0.05, 1.25]`，中心 `Z=0.65`，门洞高度 `2.25m`。
+- 共享墙厚度：卧室侧面几乎贴齐 `X=2.995`，额外厚度向造梦空间方向增长到 `X=3.30`。这样旧卧室侧不会遮挡购物终端，新房间侧提供足够厚度容纳推拉门。
+
+共享墙实现：
+
+- 不再使用“平面墙 + 额外口袋块”叠加方案。
+- 共享墙由三个厚墙块组成：
+  - 门洞负 Z 侧：`Z [-3, 0.05]`，`Y [0, 3]`
+  - 门洞正 Z 侧：`Z [1.25, 3]`，`Y [0, 3]`
+  - 门洞上方：`Z [0.05, 1.25]`，`Y [2.25, 3]`
+- 视觉墙体和碰撞体使用同一套坐标，避免墙体突起、门顶透明和碰撞不一致。
+
+造梦推拉门：
+
+- `dreamDoorMesh`：深色实木风格推拉门，使用 CanvasTexture 生成竖向木纹，并贴 `src/_logos/dream_wood_mark.svg`。
+- `dreamDoorClosedPosition`：门关闭时位于门洞中心。
+- `dreamDoorOpenPosition`：门打开时沿负 Z 滑入共享墙负 Z 段内部。
+- `dreamDoorInteractionMesh`：透明交互体。即使门打开也保留在门洞区域，使准星对门的交互优先于门后实体。
+- `dreamDoorCollider`：门关闭时加入玩家和角色碰撞；门打开后由 `main.js` 从当前碰撞作用域中移除。
+
+房间返回值：
+
+- `colliders`：旧卧室静态家具碰撞体。
+- `playerColliders`：玩家初始碰撞体，包含墙体、旧家具、关闭的造梦门。
+- `waypoints`：旧卧室角色 waypoint。
+- `oldRoomBounds` / `dreamRoomBounds`：房间范围。
+- `dreamRoomColliders`：新房间静态角色碰撞体，目前主要由主流程组合墙体和门状态。
+- `dreamRoomWaypoints`：新房间基础 waypoint。
+- `doorClearanceZone`：造梦家具禁止堵塞的门口清空区。
+- `dreamDoorMesh`, `dreamDoorInteractionMesh`, `dreamDoorCollider`, `dreamDoorClosedPosition`, `dreamDoorOpenPosition`：推拉门运行对象。
+- `painting`, `paintingLabel`, `wardrobeMesh`, `bedMesh`, `deskMesh`, `doorMesh`, `windowMesh`, `terminalMesh`, `dreamTerminalMesh`, `dreamWindowMesh`, `collectionCabinetMesh`：交互对象。
+
+静态交互：
+
+- 购物终端：旧卧室右侧墙，远离造梦空间门。
+- 造梦终端：新房间窗户对面的墙上，靠近入口，玩家从旧房间进门后容易看到。
+- 礼物收藏柜、衣柜、床、书桌、约会门、挂画保持旧功能。
+
+## 控制系统：`js/controls.js`
+
+导出：
+
+- `initControls(camera, domElement, colliders)`：初始化桌面 Pointer Lock 和移动端触控控制。
+
+返回接口：
+
+- `controls`：Three.js `PointerLockControls` 实例。
+- `state`：控制状态，包括移动键、碰撞体、锁定状态、移动端状态。
+- `update(delta)`：每帧更新玩家位置并执行碰撞检测。
+- `isNearCharacter(charPos, threshold)`：判断玩家是否接近芙提雅。
+- `addColliders(colliders)` / `removeColliders(colliders)` / `setColliders(colliders)`：动态更新玩家碰撞体。
+- `resolveCameraCollisions(radius)`：如果家具移动到玩家脚下，把相机水平推出碰撞体，避免卡住。
+- `setMovementLocked(locked)`：锁定玩家移动，但保留视角旋转，家具快捷编辑时使用。
+- `rotateView(deltaX, deltaY)`：家具快捷编辑时在非 Pointer Lock 状态下拖动视角。
+- `releaseControlMode({ resumeOnClose })`：打开 overlay 前释放控制模式。
+- `resumeControlMode()`：overlay 关闭后恢复控制模式。
+
+overlay 管理列表：
+
+- `dialogue-ui`
+- `settings-panel`
+- `history-panel`
+- `model-selector`
+- `sleep-ui`
+- `date-panel`
+- `gift-terminal-panel`
+- `gift-collection-panel`
+- `achievements-panel`
+- `dream-terminal-panel`
+- `dream-furniture-editor-panel`
+- `dream-placement-editor-panel`
+- `dream-object-controls`
+
+## 角色系统：`js/character.js`
+
+职责：
+
+- 加载 PMX 模型。
+- 修正材质和透明阴影。
+- 实现站立、行走、坐下、睡眠、挥手、互动状态机。
+- 根据房间作用域和碰撞体进行 waypoint 导航。
+- 支持动态家具 waypoint 和碰撞体。
+
+导出：
+
+- `loadCharacter(scene, waypoints, colliders, onProgress)`：加载默认 PMX，返回角色运行态 `cd`。
+- `updateCharacter(cd, delta)`：每帧更新角色状态机。
+- `updateBlink(cd, delta)`：眨眼 morph 更新。
+- `startWaving(cd)`：触发挥手。
+- `applyIdlePose(cd)`：应用站立姿势。
+- `applySleepingPose(cd)`：应用睡眠姿势。
+- `forceStandUp(cd)`：强制从坐下状态起身。
+- `setSittingEnabled(cd, enabled)`：启用/禁用家具坐下逻辑；小小老师等特殊模型会禁用坐下/睡觉。
+- `setCharacterNavigationScope(cd, scope)`：完整切换导航作用域，包含 `roomId`、`bounds`、`waypoints`、`colliders`。
+- `refreshCharacterNavigationData(cd, scope)`：刷新 waypoint/collider，不重置整个角色状态；家具样式修改后使用。
+- `moveCharacterToWaypoint(cd, waypoint, options)`：强制角色走向指定 waypoint，支持 `nextWaypoints` 队列。
+- `forceCharacterIntoRoom(cd, roomId, spawnPosition)`：寻路失败时作为兜底，把角色迁移到房间内安全位置。
+- `getCharacterPosition(cd)`：获取角色当前位置。
+- `startInteraction(cd, getPlayerPos)` / `endInteraction(cd)`：日常对话互动模式。
+- `swapModel(scene, cd, modelPath)`：换装。
+
+关键内部逻辑：
+
+- `checkCollision(cd, pos)`：角色 capsule 近似碰撞。
+- `buildPathAroundColliders(cd, start, target)`：房间局部网格 A* 寻路，绕开家具。
+- `isSegmentClear(cd, start, end)`：采样检测线段是否被碰撞体阻挡。
+- `beginWalkToWaypoint(cd, waypoint)`：把 semantic waypoint 转成实际行走路径。
+- `getSitApproachPosition(waypoint)` / `getFurnitureSitPose(cd, waypoint)`：根据床/椅子的 `sitCollider` 自动计算坐下边缘，避免坐在空气中或过深。
+- `finishWalking(cd)`：到达动态家具 waypoint 时派发 `fritia-dream-furniture-visited`。
+
+导航规则：
+
+- 玩家在旧卧室时，芙提雅只使用旧卧室 waypoint 和旧卧室碰撞体。
+- 玩家进入造梦空间时，芙提雅切换到造梦空间 waypoint + 动态家具 waypoint。
+- 动态家具碰撞体加入造梦空间角色导航，家具修改后会刷新。
+- 如果行走路径碰撞边缘导致卡住，角色允许短暂穿模继续移动，优先避免状态机永久停住。
+
+## 游戏状态：`js/game_state.js`
+
+localStorage key：`fritia_game_state`
+
+导出：
+
+- `initGameState()`：加载并规范化存档。
+- `updateGameTime(realDeltaSeconds)`：推进游戏时间，跨天发放日薪。
+- `getGameTimeInfo(options)`：返回量化后的时间信息。
+- `formatGameDateTime(options)`：格式化游戏内日期时间。
+- `getGameTimeContext()`：给 LLM 使用的时间上下文。
+- `getMoney()` / `getAffinity()`：读取数据金和好感。
+- `formatMoney(amount)`：格式化数据金。
+- `addAffinity(amount)`：增加好感并派发 `fritia-affinity-updated`。
+- `canAfford(amount)`：余额判断。
+- `spendMoney(amount)`：扣除数据金并派发 `fritia-game-state-updated`。
+- `addMoney(amount, reason)`：增加数据金，HUD 可显示 `+amount`。
+- `recordGiftEstimate(amount)` / `recordDialogueInteraction(type, assistantText, locationId)` / `recordModelUsed(path)` / `recordHeadPat()`：统计数据。
+- `recordDreamFurnitureRevision(count)`：记录单件造梦家具已确认的最大样式修改次数，用于“完美主义”成就。
+- `addGift(gift)` / `getGifts()` / `mergeGifts(gifts)`：礼物库存。
+- `exportGameState()` / `importGameState(data, options)`：存档导入导出。
+
+存档规范化：
+
+- 旧存档缺少 `stats`、`gifts`、`dreamFurniture` 等字段时使用默认值。
+- `readDreamFurnitureSnapshot()` 会读取 `fritia_dream_furniture` 快照，方便导出兼容。
+
+## 设置系统：`js/settings.js`
+
+localStorage key：`fritia-settings`
+
+导出：
+
+- `getSettings()`：读取设置，包含 `apiKey`、`baseUrl`、`model`。
+- `saveSettings(settings)`：保存设置。
+- `initSettings()`：绑定设置面板 DOM 和按钮。
+
+默认值：
+
+- `baseUrl`: `https://api.openai.com/v1`
+- `model`: `gpt-4o-mini`
+
+所有 LLM 调用都复用这里的设置。
+
+## 日常对话：`js/dialogue.js`
+
+localStorage key：`fritia_chat_history`
+
+导出：
+
+- `initDialogue()`：加载人格设定、历史记录并绑定 UI。
+- `showDialogue()` / `hideDialogue()` / `isDialogueVisible()`：日常对话 overlay 控制。
+- `getConversationHistory()`：导出当前日常聊天历史。
+- `importConversationHistory(data)`：导入历史。
+
+关键内部逻辑：
+
+- `loadSystemPrompt()`：加载 `src/_queries/system_prompt.txt`。
+- `buildSystemPrompt()`：组合人格设定、游戏时间和造梦家具上下文。
+- `getContextMessages()`：截取近期消息作为上下文。
+- `handleSend()`：调用 OpenAI 兼容 API，并以 SSE 方式流式更新回复。
+
+造梦家具上下文：
+
+- `dialogue.js` 会读取 `getDreamFurnitureDialogueContext()`。
+- 玩家提到已创建家具时，芙提雅可以基于家具名称和玩家原始描述回答。
+
+## 约会系统：`js/date_dialogue.js`
+
+localStorage key：`fritia_date_history`
+
+导出：
+
+- `initDateDialogue()`：初始化约会面板。
+- `openDatePanel()` / `closeDatePanel()` / `isDatePanelVisible()`：约会 overlay 控制。
+- `getDateLocations()`：约会地点配置。
+- `getDateConversationHistory()` / `importDateConversationHistory(data)`：约会历史导入导出。
+
+关键内部逻辑：
+
+- `loadDatePrompt()`：加载 `src/_queries/date_prompt.txt`。
+- `buildDateSystemPrompt(locationName)`：组合地点和人设。
+- `startDateConversation(loc)`：进入约会聊天。
+- `handleDateSend()`：发送约会消息并记录好感。
+
+## 礼物系统：`js/gift_system.js`
+
+职责：
+
+- 购物终端 overlay。
+- LLM 估价和好感评分。
+- 礼物支付、库存、收藏柜展示。
+
+导出：
+
+- `initGiftSystem()`
+- `openGiftTerminal()` / `closeGiftTerminal()`
+- `openGiftCollection()` / `closeGiftCollection()`
+- `isGiftOverlayVisible()`
+- `renderGiftCollection()`
+
+关键内部逻辑：
+
+- `handleEvaluateGift()`：检查输入和 API 设置，调用 LLM 评估礼物。
+- `requestGiftEvaluation(detail, settings)`：请求 LLM。
+- `buildGiftRequestBody(detail, settings, mode)`：构造 OpenAI 兼容请求体。
+- `fetchGiftCompletionStream(settings, body)`：兼容 SSE 流式响应。
+- `parseGiftEvaluation(content)`：解析礼物名称、价格、评分、理由。
+- `handlePurchaseGift()`：扣款、加好感、加入礼物库存。
+
+## 成就系统：`js/achievements.js`
+
+localStorage key：`fritia_achievements`
+
+导出：
+
+- `initAchievements()`
+- `openAchievementsPanel()` / `closeAchievementsPanel()` / `isAchievementsPanelVisible()`
+- `evaluateAchievements(options)`
+- `flushStartupAchievementToasts()`
+- `refreshAchievementsFromImport()`
+- `exportAchievements()` / `importAchievements(data)`
+
+行为：
+
+- 成就卡片显示在最顶层，覆盖普通 overlay。
+- 解锁时播放 `src/_voices/achievement_complete.mp3`。
+- 成就状态包含 `unlocked` 和 `notified`，导入时按时间戳合并。
+- “布置爱巢”位于“比翼双飞”后方，读取 `fritia_dream_furniture` 当前记录数，造梦空间内自制家具达到 `5` 件时解锁，图标 `src/_logos/ach_dream_love_nest.svg`。
+- “完美主义”位于“布置爱巢”后方，读取家具记录的 `revisionCount` 和 `stats.maxDreamFurnitureRevisionCount`，同一件造梦家具确认样式修改达到 `3` 次时解锁，图标 `src/_logos/ach_dream_perfectionist.svg`。
+
+## 造梦系统总览
+
+造梦系统由三个模块组成：
+
+- `dream_system.js`：运行时、UI、存档、摆放、交互、角色台词。
+- `dream_furniture_factory.js`：确定性家具 JSON 规范化、校验、mesh 和 collider 构建。
+- `dream_llm.js`：OpenAI 兼容 LLM 请求和响应解析。
+
+核心规则：
+
+- 制造家具花费 `500` 数据金，只在部署成功并保存成功后扣费。
+- 每成功制造一件新家具，增加 `5` 好感度。
+- 样式修改花费 `100` 数据金，只在预览部署成功后扣费。
+- 样式修改回退返还 `50` 数据金。
+- 删除造梦家具返还 `400` 数据金。
+- 家具数据存储在 `fritia_dream_furniture`。
+- 玩家可以自然语言描述家具和摆放位置，但最终坐标和碰撞由本地确定性代码决定。
+
+## 家具工厂：`js/dream_furniture_factory.js`
+
+导出：
+
+- `DREAM_FURNITURE_SCHEMA_VERSION`：当前 schema 版本，值为 `1`。
+- `normalizeFurnitureSpec(rawSpec)`：规范化 LLM 输出，补默认值、截断文本、限制尺寸、过滤非法 primitive/material/color。
+- 坐标约定：组件 `position` 是家具局部坐标中的组件中心点，`+Y` 向上，家具原点位于地面中心。规范化时先计算所有组件的整体包围范围；如果 LLM 把家具中心当作局部原点导致最低点低于地面，会整体上移所有组件，保留桌面、桌腿、桌上物体之间的相对上下关系。
+- 样式修改时如果 LLM 新增了桌面电脑、灯具等上方物体但忘记扩大 `dimensions.height`，规范化逻辑会先根据组件包围范围扩展 `dimensions`，再 clamp 组件位置，避免上方物体被压到桌面下方。
+- `validateFurnitureSpec(rawSpec)`：校验顶层对象、名称、类别、尺寸、组件数组、颜色、材质、朝向等。
+- `createFurnitureFromSpec(rawSpec)`：根据规范化 spec 创建 Three.js `Group`。
+- `applyFurniturePose(group, placement)`：应用家具位置和 Y 轴旋转。
+- `estimateFurnitureAABB(group)`：估计家具整体 AABB。
+- `createFurnitureCollider(group)`：创建整体 AABB collider，用于 UI 投影等。
+- `createFurnitureColliders(group)`：创建组件级 collider，用于玩家和角色碰撞。样式修改后可增加/减少实体碰撞区域。
+- `serializeFurniture(furniture)` / `deserializeFurniture(data)`：存档序列化和旧数据兼容。
+
+支持 primitive：
+
+- `box`
+- `cylinder`
+- `sphere`
+- `cone`
+- `torus`
+- `plane`
+
+支持材质 preset：
+
+- `wood`
+- `metal`
+- `glass`
+- `fabric`
+- `plastic`
+- `stone`
+- `emissive`
+- `default`
+
+渲染细节：
+
+- 对不透明组件使用轻量 `polygonOffset` 分层，减少 LLM 生成组件重叠时的 z-fighting 闪烁。
+- 不改变几何、碰撞和存档，只优化渲染观感。
+
+## 造梦 LLM：`js/dream_llm.js`
+
+导出：
+
+- `requestDreamFurnitureSpec({ description, placementText, roomContext, existingFurniture, settings })`：根据玩家家具愿望生成严格家具 JSON。
+- `requestDreamFurnitureRevision({ furniture, instruction, roomContext, settings })`：根据现有家具 JSON 和玩家自然语言修改要求生成新的家具 JSON。
+- `requestFurnitureRomanticLine({ furniture, gameTimeContext, settings })`：为芙提雅访问家具生成一句恋爱向短台词。
+
+关键内部逻辑：
+
+- `normalizeBaseUrl(baseUrl)`：规范化 API 地址。
+- `loadCharacterPrompt()`：加载并缓存 `src/_queries/system_prompt.txt`，家具台词使用同一人格设定。
+- `stripCodeFence(text)`：去除 Markdown 代码块。
+- `extractJsonObject(text)`：从 LLM 文本中提取第一个完整 JSON object。
+- `fetchChatCompletion(settings, body)`：兼容流式和非流式 OpenAI 响应。
+- `fetchChatCompletionJson(settings, body)`：请求并解析 JSON。
+- 家具制造和样式修改请求不设置本地 `max_tokens` 硬上限，避免复杂家具 JSON 被截断；解析时由 `extractJsonObject()` 找到完整 JSON object 的结尾并忽略后续解释文本。
+- `buildFurniturePrompt(...)`：构造家具制造 prompt。
+- `buildFurnitureRevisionPrompt(...)`：构造家具样式修改 prompt。
+- `cleanRomanticLine(content)`：清理家具台词，去除引号、JSON 包装、说话人前缀。
+- `shouldRetryRomanticLine(json, line)`：reasoning 模型因 token 太少只返回 reasoning 时，自动重试一次更高 token。
+
+家具 JSON 协议重点：
 
 ```json
 {
-  "name": "鏄熷厜闃呰娌欏彂",
+  "name": "星光阅读沙发",
   "category": "seat",
-  "description": "閫傚悎涓や汉闈犲潗鐨勬煍杞矙鍙戙€?,
+  "description": "适合两人靠坐的柔软沙发。",
   "dimensions": { "width": 1.8, "height": 0.9, "depth": 0.85 },
   "frontDirection": "+Z",
   "anchor": "floor",
@@ -248,122 +503,460 @@ LLM 鍙兘杈撳嚭瀹跺叿瑙勬牸 JSON锛屼笉鍏佽杈撳嚭 Markdow
       "enabled": true,
       "offset": { "x": 0, "y": 0, "z": 1.0 },
       "furnitureType": "seat",
-      "dialogueTags": ["娌欏彂", "鏄熷厜", "浼戞伅"]
+      "dialogueTags": ["沙发", "休息"]
     }
   },
-  "placement": { "intent": "闈犺繎绐楄竟", "preferredWall": "window", "avoidDoor": true }
+  "placement": {
+    "intent": "靠近窗边，但不要挡住门",
+    "preferredWall": "window",
+    "avoidDoor": true
+  }
 }
 ```
 
-### 浜や簰瑙勫垯
+## 造梦运行时：`js/dream_system.js`
 
-- 鐪嬪悜閫犳ⅵ缁堢鎸?`E` 鎵撳紑 `瀹跺叿甯冪疆` 娴眰銆?- 閫犳ⅵ缁堢娴眰鏍囬鏁村悎涓?`閫犳ⅵ-瀹跺叿鎵撻€犵粓绔痐锛岃瑙変娇鐢ㄩ」鐩幇鏈夋繁鑹插崐閫忔槑娴眰閰嶈壊锛涘乏渚т负鎰挎湜杈撳叆宸ヤ綔鍖猴紝鍙充晶涓烘墦閫犲弬鏁颁笌杩涘害鐘舵€併€?- 鍒堕€犻樁娈碉細`妫€鏌ヤ綑棰濅笌 API 璁剧疆` 鈫?`姝ｅ湪瑙ｆ瀽瀹跺叿鎰挎湜` 鈫?`姝ｅ湪鐢熸垚瀹跺叿缁撴瀯` 鈫?`姝ｅ湪瀵绘壘瀹夊叏鎽嗘斁浣嶇疆` 鈫?`姝ｅ湪閮ㄧ讲鍒版埧闂碻 鈫?`瀹屾垚`銆?- 浣欓涓嶈冻銆佹湭閰嶇疆 API Key銆丩LM 璇锋眰澶辫触銆丣SON 瑙ｆ瀽澶辫触銆乻chema 鏍￠獙澶辫触銆佸昂瀵歌繃澶с€佹棤瀹夊叏鎽嗘斁浣嶇疆銆佷繚瀛樺け璐ラ兘涓嶆墸閽便€?- 鐪嬪悜宸茬敓鎴愬鍏锋寜 `E` 涓嶆墦寮€娴眰锛岃€屾槸鍦ㄥ鍏峰疄浣撲腑澶姇褰?`#dream-object-controls`銆?- `#dream-object-controls` 浠ュ崄瀛楁帓甯冨墠鍚庡乏鍙?0.25m 绉诲姩鎸夐挳锛屼腑蹇冧负缁胯壊纭鎸夐挳锛屽乏鍙充袱渚у寤朵负宸﹁浆/鍙宠浆 15掳锛屼笅鏂瑰寤朵负缂栬緫鎸夐挳銆?- 瀹跺叿蹇嵎绠＄悊鏃堕噴鏀?pointer lock 骞堕€氳繃 `#dream-object-controls` 绌虹櫧鍖哄煙鎷栨嫿杞姩瑙嗚锛屽悓鏃堕€氳繃 `setMovementLocked(true)` 绂佹鐜╁绉诲姩銆?- 绉诲姩鎸夐挳鐭寜涓€娆＄Щ鍔?0.25m锛涢暱鎸夎秴杩?0.5 绉掑悗杩炵画鍚戝搴旀柟鍚戠Щ鍔ㄣ€?- 鏃嬭浆鎸夐挳鐭寜涓€娆℃棆杞?15掳锛涢暱鎸夎秴杩?0.5 绉掑悗鎵嶈繘鍏ュ钩婊戣繛缁棆杞€?- 鐐瑰嚮蹇嵎缂栬緫鎸夐挳鎵嶆墦寮€ `#dream-furniture-editor-panel`锛岃娴眰鍙礋璐ｉ噸鍛藉悕銆佹柊鎽嗘斁浣嶇疆鑷姩鎽嗘斁銆侀噸缃拰鍒犻櫎銆?- 瀹跺叿绉诲姩/鏃嬭浆鎴愬姛涓嶆樉绀衡€滀綅缃凡鏇存柊鈥濇垨鈥滄棆杞凡鏇存柊鈥濓紱澶辫触鏃跺湪涓诲睆骞曞眳涓亸涓嬬敤 `#dream-screen-toast` 鏄剧ず涓婃诞姘旀场銆?- 瀹跺叿绉诲姩鎴栨棆杞悗锛屽鏋滅帺瀹剁浉鏈轰笌瀹跺叿/澧欎綋纰版挒浣撻噸鍚堬紝璋冪敤 `resolveCameraCollisions()` 鑷姩閫€閬裤€?- 瀹跺叿绠＄悊鏀寔閲嶅懡鍚嶃€佹寜鑷劧璇█閲嶆柊鑷姩鎽嗘斁銆侀噸缃拰鍒犻櫎銆?- 绉诲姩/鏃嬭浆鍚庨噸鏂板仛杈圭晫銆侀棬鍙ｆ竻绌哄尯鍜屽鍏烽噸鍙犳娴嬶紱澶辫触鍥炴粴銆?- 鍒犻櫎瀹跺叿浼氱Щ闄?mesh銆乧ollider銆亀aypoint 鍜?localStorage 璁板綍锛屽苟閫€鍥?400 鏁版嵁閲戙€?- 鐜╁杩涘叆閫犳ⅵ鎴块棿鍚庯紝鑺欐彁闆呭鑸垏鎹㈠埌閫犳ⅵ鎴块棿锛涘洖鏃ф埧闂村悗鍒囧洖鏃ф埧闂淬€?- 鍔ㄦ€佸鍏峰彴璇嶅悓涓€瀹跺叿鑷冲皯鍐峰嵈 10 鍒嗛挓鐜板疄鏃堕棿銆?
-### 娴嬭瘯鏂规硶
+导出：
 
-1. `npm run dev` 鍚姩闈欐€佹湇鍔°€?2. 纭鏃ф埧闂淬€佽喘鐗╃粓绔€佺ぜ鐗╂敹钘忋€佺害浼氥€佹崲瑁呫€佸簥銆佹寕鐢诲拰鏃ュ父瀵硅瘽浠嶈兘浜や簰銆?3. 浠庢棫鎴垮彸渚ч棬娲炶繘鍏ラ€犳ⅵ鎴块棿锛岀‘璁や笉浼氳澧欎綋纰版挒鍫典綇銆?4. 鐪嬪悜閫犳ⅵ缁堢鎸?`E`锛岀‘璁ゆ诞灞傛墦寮€銆佹帶鍒堕噴鏀俱€佸叧闂悗鎭㈠鎺у埗銆?5. 鏈厤缃?API Key 鏃剁偣鍑诲埗閫犲鍏凤紝纭鎻愮ず閿欒涓斾笉鎵ｉ挶銆?6. 浣欓涓嶈冻鏃剁‘璁や笉璋冪敤 LLM 涓斾笉鎵ｉ挶銆?7. 浣跨敤鍚堟硶 LLM 杈撳嚭鍒堕€犲鍏凤紝纭瀹跺叿鐢熸垚鍦ㄩ€犳ⅵ鎴块棿鍐呫€佷笉绌垮銆佷笉鎸￠棬銆佷笉閲嶅彔锛屼笖鎴愬姛鍚庢墸闄?500 鏁版嵁閲戙€?8. 鍒锋柊椤甸潰纭瀹跺叿鎭㈠銆?9. 鐪嬪悜瀹跺叿鎸?`E`锛岀‘璁ゅ疄浣撲腑澶嚭鐜扮揣鍑戝崐閫忔槑蹇嵎鍦嗗舰鎸夐挳锛涙祴璇曠煭鎸夌Щ鍔ㄣ€侀暱鎸夎繛缁Щ鍔ㄣ€佺煭鎸夋棆杞€侀暱鎸夎繛缁棆杞€佷腑蹇冪‘璁ゃ€?10. 鐐瑰嚮蹇嵎缂栬緫鎸夐挳锛屾祴璇曢噸鍛藉悕銆佽嚜鍔ㄦ憜鏀俱€侀噸缃€佸垹闄ゃ€?11. 鍒犻櫎瀹跺叿鍚庣‘璁ゆ暟鎹噾澧炲姞 400锛屽乏涓婅鏁版嵁閲戜綑棰濆悗鏄剧ず `+400`銆?12. 瀹跺叿蹇嵎绠＄悊鏃惰浆鍔ㄨ瑙掞紝纭鍙湅鍚戝洓鍛ㄤ絾 WASD/鎽囨潌涓嶈兘绉诲姩鐜╁銆?13. 灏嗗鍏风Щ鍔ㄥ埌鐜╁鑴氫笅闄勮繎锛岀‘璁ょ浉鏈鸿嚜鍔ㄩ€€閬夸笖涓嶄細鍗¤繘瀹跺叿鎴栧浣撱€?14. 瀵煎嚭 JSON 鍚庡啀瀵煎叆锛岀‘璁ゅ鍏锋仮澶嶄笖鍧忓鍏蜂笉浼氬鑷存暣浣撳鍏ュけ璐ャ€?15. 鐜╁杩涘嚭閫犳ⅵ鎴块棿锛岀‘璁よ姍鎻愰泤鍙湪褰撳墠鎴块棿鐨?waypoint 鍐呯Щ鍔ㄣ€?16. 鑺欐彁闆呭埌杈惧姩鎬佸鍏?waypoint 鍚庯紝鍦ㄥ喎鍗磋鍒欎笅鐢熸垚杞婚噺鍙拌瘝銆?17. 绉诲姩绔鍙ｆ鏌ヨ緭鍏ユ瀛楀彿銆佹寜閽竷灞€鍜屽叧闂悗鎺у埗鎭㈠銆?
-## 2026-06-18 Dream System Incremental Notes
+- `initDreamSystem(options)`：初始化造梦系统，绑定 DOM、加载本地家具、注册事件。
+- `openDreamPanel()` / `closeDreamPanel()` / `isDreamOverlayVisible()`：造梦终端 overlay。
+- `isDreamRevisionPending()`：是否处于家具样式修改确认/回退状态。
+- `constrainPendingRevisionPlayer()`：样式修改待确认时限制玩家留在造梦空间。
+- `isLookingAtDreamTerminal(camera)`：造梦终端准星检测，带视线遮挡判断。
+- `isLookingAtDreamFurniture(camera)` / `getLookingDreamFurniture(camera)`：造梦家具管理目标检测。
+- `openDreamFurnitureEditor(furnitureId)` / `closeDreamFurnitureEditor()`：打开/关闭家具快捷编辑。
+- `confirmPendingDreamRevision()` / `rollbackPendingDreamRevision()`：确认或回退样式修改预览。
+- `getDreamFurnitureInteractables()`：家具交互对象列表。
+- `getDreamFurnitureColliders()`：动态家具组件级碰撞体列表。
+- `getDreamFurnitureWaypoints()`：动态家具 waypoint 列表。
+- `getDreamFurnitureLabel(furnitureId)`：家具名称，用于提示 `按 E 管理 [名称]`。
+- `getDreamFurnitureDialogueContext()`：给日常对话注入的家具背景。
+- `exportDreamFurniture()` / `importDreamFurniture(data)`：导出/导入造梦家具。
+- `refreshDreamFurnitureAfterImport()`：导入后刷新运行时家具。
 
-- `index.html`
-  - Added object-control delete button `#dream-object-delete`, using `src/_logos/dream_trash.svg`.
-  - Removed delete action from the edit overlay; `#dream-furniture-editor-panel` now keeps rename, auto-place, and reset only.
-- `css/style.css`
-  - Added `.dream-object-btn.delete` placement and danger styling.
-  - Added `.dream-character-bubble` for Fritia's head-above furniture romance line bubble.
-- `js/dream_system.js`
-  - New exported helpers: `getDreamFurnitureLabel(furnitureId)` and `getDreamFurnitureDialogueContext()`.
-  - Furniture records now persist `playerDescription`, the text typed by the player during creation. Old saves without this field fall back to `description`.
-  - `#dream-object-delete` calls the existing delete confirmation/refund flow.
-  - Move buttons still short-click by `0.25m`; long press after `0.5s` now moves smoothly in `0.05m` ticks every `40ms`.
-  - Furniture placement now tries wall-adjacent candidates before center fallback and rejects the dream-room window clearance zone as well as door clearance/overlaps.
-  - Dynamic furniture romance lines are shown with `.dream-character-bubble` projected above Fritia's model instead of a detached toast.
-- `js/dialogue.js`
-  - Daily chat system prompt appends `getDreamFurnitureDialogueContext()` so Fritia can answer questions about player-created furniture names and descriptions.
-- `js/character.js`
-  - Added `moveCharacterToWaypoint(cd, waypoint, options)` for room transition walking, with optional queued waypoints.
-- `js/main.js`
-  - Room switches now try a two-step walking route through the shared door and only fall back to `forceCharacterIntoRoom()` if the route cannot start.
-  - Furniture interaction prompt now includes the target furniture name.
+关键内部逻辑：
 
-Additional tests:
+- `handleCreateFurniture()`：制造家具主流程。
+- `findSafePlacement(group, spec, placementText, excludeId)`：本地寻找安全摆放点。
+- `buildCandidatePositions(spec, placementText, placement)`：根据自然语言关键词、LLM placement intent、墙/窗/门位置生成候选坐标。
+- `validateRuntimePlacement(group, excludeId)`：检查边界、门口清空区、窗户清空区、已有家具碰撞。
+- `rotateTowardInterior(pos, spec, baseRotation)`：靠墙家具自动面向房间内部。
+- `deployRecord(record)`：创建家具 mesh、整体 collider、组件 collider、waypoint，并加入场景。
+- `refreshRecordRuntime(record)`：家具移动/旋转/样式修改后刷新 mesh/collider/waypoint。
+- `bindMoveHold(id, intent)` / `bindRotateHold(id, amount)`：快捷按钮短按与长按连续移动/旋转。
+- `getEditMoveDelta(intent, amount)`：家具编辑方向基于玩家视角动态贴近世界 X/Z 轴；坐标轴本身不变。
+- `handleStyleRevision()`：样式修改流程。LLM 返回新 spec 后，本地校验、预览部署、扣费、进入确认/回退状态。
+- `handleFurnitureVisited(event)`：芙提雅到达动态家具 waypoint 后，按冷却和概率触发家具台词。
+- `showCharacterSpeechBubble(line)`：在芙提雅头顶显示面向屏幕的气泡。
+- `getFallbackFurnitureLine()`：LLM 失败或跳过时选择本地兜底台词。
 
-1. Move between bedroom and dream room and verify Fritia walks through the door before teleport fallback is needed.
-2. Let Fritia reach a generated furniture waypoint and verify the LLM line appears above her head.
-3. Ask about a generated furniture item in daily dialogue and verify the name/player description are available in context.
-4. In object controls, long-press move buttons and verify movement is smooth; click the trash button and verify confirm + `+400` refund.
-5. Create furniture with no placement text and verify the first accepted placement is wall-adjacent without blocking the door or window.
+制造家具阶段：
 
-### 2026-06-18 Bubble Fix Note
+1. 检查余额与 API 设置。
+2. 正在解析家具愿望。
+3. 正在生成家具结构。
+4. 正在寻找安全摆放位置。
+5. 正在部署到房间。
+6. 完成。
 
-- Furniture romance bubbles now use Fritia's head bone world position first, with model AABB as fallback.
-- Bubble visibility no longer depends on a strict projected-z visibility gate, preventing valid LLM lines from being hidden when the model bounds or camera projection are unusual.
-- Console logs now show `[Dream] furniture romantic line bubble:` when a line is passed to the head bubble, and `[Dream] furniture romantic line skipped:` when the LLM call returns no displayable line.
+失败不扣钱：
 
-### 2026-06-18 Furniture Dialogue Fallback Note
+- 未配置 API Key。
+- 数据金不足。
+- LLM 请求失败。
+- LLM 输出不是合法 JSON。
+- schema 校验失败。
+- 家具尺寸过大。
+- 无安全摆放位置。
+- localStorage 保存失败。
+- 未知异常。
 
-- Dream furniture dialogue cooldown is now `60 * 1000` ms real time per furniture item.
-- Furniture visits first check active gameplay state; no bubble is shown while controls are not locked, while sleeping, during daily dialogue, date dialogue, gift overlays, or dream overlays.
-- Each eligible visit has a `0.5` chance to call the LLM. If the LLM is skipped or fails, the system uses one of 18 local Fritia-style fallback lines.
-- Furniture romance line requests use non-streaming `chat/completions` to avoid incompatible SSE parsers returning `LLM 没有返回最终 JSON 内容。` for short plain-text lines.
+家具快捷管理：
 
-### 2026-06-18 Furniture Dialogue Parse And Navigation Note
+- 看向家具按 `E` 不直接打开大 overlay，而是在家具实体中心投影 `#dream-object-controls`。
+- 前/后/左/右按钮移动家具，短按一步 `0.25m`，长按超过 `0.5s` 后平滑连续移动。
+- 左转/右转按钮短按 `15°`，长按超过 `0.5s` 后平滑连续旋转。
+- 中央绿色按钮确认退出快捷编辑。
+- 重置按钮在左转按钮下方。
+- 编辑、重新自动摆放、删除三个按钮位于右侧同一列。
+- 删除保留 `confirm()` 二次确认并退还 `400` 数据金。
 
-- `js/dream_llm.js` now accepts more OpenAI-compatible `chat/completions` response shapes, including nested `message.content`, array text blocks, `output_text`, and direct `{ "line": "..." }`/`{ "text": "..." }` style responses.
-- Furniture romance line requests log `[Dream][LLM] furniture romantic raw output:` before local cleanup, so F12 can show the exact model output used for the bubble.
-- Furniture romance line cleanup now strips code fences, optional JSON wrappers, quotes, whitespace, and a leading `芙提雅：` speaker prefix before deciding whether the LLM returned an empty line.
-- `js/character.js` now routes character walking through a small room-local grid A* when the direct segment to a waypoint is blocked by furniture colliders.
-- Character walking no longer treats a mid-path collider hit as waypoint arrival. It tries to re-plan toward the original waypoint; if re-planning fails, it returns to idle instead of firing the furniture-visited event.
-- Random idle movement, post-sit movement, and room-transition movement all use the same waypoint walking entry so generated furniture can be avoided consistently.
+样式修改：
 
-### 2026-06-18 Stuck Prevention And Fallback Line Note
+- 在家具编辑 overlay 的“家具样式修改”中输入自然语言要求。
+- 成功后退出 overlay，进入主界面预览状态。
+- 显示 `[1] 确认` 和 `[2] 回退`。
+- 未确认/回退前，玩家可走动但不能触发其他交互，并被限制在造梦空间内。
+- 按 `[1] 确认` 后，该家具 `revisionCount` 加 `1`，并通过 `recordDreamFurnitureRevision()` 刷新“完美主义”成就统计。
+- 回退恢复修改前 spec，并返还 `50` 数据金。
 
-- Character waypoint planning still avoids colliders, but walking execution no longer stops when a segment brushes a collider edge. It marks `walkClipping` and keeps moving so Fritia cannot remain stuck forever on furniture collision boundaries.
-- If grid routing cannot produce a safe route, `beginWalkToWaypoint()` falls back to a direct segment. A brief visual clip is accepted over blocking the character state machine.
-- `FALLBACK_FURNITURE_LINES` is now stored as readable Chinese text in `js/dream_system.js`.
-- `getFallbackFurnitureLine()` filters empty values and always returns a non-empty Chinese fallback line before showing Fritia's head bubble.
+家具台词：
 
-### 2026-06-18 Furniture Reasoning Token Retry Note
+- 事件来源：`character.js` 到达动态家具 waypoint 后派发 `fritia-dream-furniture-visited`。
+- 同一家具冷却：`20 * 1000` ms 现实时间。
+- LLM 调用概率：当前为 `0.5`，未调用或失败时使用本地兜底台词。
+- 如果芙提雅头顶位置不在玩家当前视野内，则当次不显示气泡，也不发起台词展示。
+- 日常对话、约会、礼物、造梦 overlay、睡眠、非操作模式中不会触发家具台词。
 
-- `js/dream_llm.js` now keeps furniture romance line responses as raw chat completion JSON before extracting display text.
-- Furniture romance `max_tokens` is raised from `80` to `256` because reasoning models can consume the whole small budget before producing `message.content`.
-- If the first response has empty `message.content`, non-empty `message.reasoning_content`, and `finish_reason: "length"`, the request is retried once with `max_tokens: 640` and lower temperature.
-- `reasoning_content` is intentionally not shown as dialogue; only final assistant content or explicit `line`/`text` fields are displayed.
+## DOM ID 清单
 
-### 2026-06-18 Furniture Personality Context Note
+基础：
 
-- Furniture romance line requests now load and cache `src/_queries/system_prompt.txt`, matching the daily dialogue personality source.
-- The furniture bubble prompt appends a short scene-specific constraint after the full character prompt: generate one concise romance line about the player-created furniture, without narration or reasoning.
-- Dream furniture dialogue cooldown is now `20 * 1000` ms real time per furniture item.
-- Eligible furniture visits now call the LLM with probability `0.8`; skipped or failed calls still use local fallback lines.
+- `#game-canvas`
+- `#loading-screen`, `#loading-progress`, `#loading-text`
+- `#fade-overlay`
+- `#hud`, `#crosshair`, `#game-status`
+- `#game-time-display`, `#affinity-display`, `#affinity-value`, `#money-display`, `#salary-toast`
+- `#interaction-prompt`, `#painting-prompt`
+- `#click-to-play`
 
-### 2026-06-18 Furniture Sitting Edge Note
+顶部按钮：
 
-- Bedroom bed and chair waypoints now include `sitCollider` metadata.
-- `character.js` computes sitting pose from the nearest edge of the furniture collider instead of always backing up from the current waypoint.
-- Sitting transition no longer teleports the character to the collider edge after turning. Waypoints are placed at the stable outside edge, and the collider edge only determines final hip position and outward-facing direction.
-- The bed uses the open room-side edge as its sitting edge, avoiding wall/headboard side selection.
-- The chair uses its front edge as the sitting edge.
-- Bed/chair sitting waypoints remain semantic furniture anchors. `character.js` derives the actual walk target from `sitCollider`, placing it just outside the usable sitting edge so A* does not push the character away from an invalid in-collider point.
-- The final hip target is pushed deeper onto the surface to avoid a too-forward, dangling posture.
-- Furniture sitting routes append the computed sit-approach point as the final walking segment when A* simplifies to a nearby grid cell, so the character walks to the trigger point instead of sliding there during the sit animation.
-- The bed hip inset is shallower than the chair inset so Fritia does not sit too deep on the bed.
-- This avoids the old failure mode where path clipping or a waypoint inside the bed/chair collider caused Fritia to sit in midair near the furniture edge.
+- `#btn-achievements`
+- `#btn-history`
+- `#btn-export`
+- `#btn-import`
+- `#settings-toggle`
+- `#import-file`
 
-### 2026-06-18 Furniture Edit View-Axis Move Note
+对话：
 
-- Dream furniture object-control move buttons still move furniture only along world X/Z axes.
-- During active furniture editing, forward/back/left/right are derived from the current camera horizontal look direction snapped to the nearest world X or Z axis.
-- Long-press movement recomputes this mapping on each smooth movement tick, so rotating the view while editing immediately changes the button basis for the active furniture only.
+- `#dialogue-ui`
+- `#dialogue-box`
+- `#dialogue-name`
+- `#dialogue-text`
+- `#dialogue-input`
+- `#dialogue-send`
+- `#dialogue-close`
 
-### 2026-06-18 Dream Furniture LLM Revision Note
+设置：
 
-- `js/dream_llm.js` exports `requestDreamFurnitureRevision({ furniture, instruction, roomContext, settings })`.
-- Style revision sends the current safe furniture JSON plus the player's natural-language request to the existing OpenAI-compatible `chat/completions` settings, and expects one complete replacement furniture spec JSON.
-- The revised spec is still validated locally through `normalizeFurnitureSpec()`, `createFurnitureFromSpec()`, and `validateRuntimePlacement()`; LLM output is never executed.
-- `dream_furniture_factory.js` now exposes `createFurnitureColliders(group)` for component-level dynamic colliders. Runtime keeps one whole-furniture AABB for UI projection, but player and character collision use the component collider list so revised furniture can gain or lose solid areas such as wall doorways.
-- `character.js` exports `refreshCharacterNavigationData(cd, scope)`. Dream furniture changes update Fritia's active waypoints/colliders without a full room-scope reset, and invalidate the current walking path if it was planned through an area that is now blocked by revised furniture.
-- `#dream-furniture-editor-panel` now contains `#dream-editor-style-instruction`, `#dream-editor-style-apply`, `#dream-editor-style-progress`, and `#dream-editor-style-progress-fill`.
-- Style revision costs `100 数据金` only after the revised furniture preview is validated and deployed. While pending, `#dream-revision-confirm-bar` shows `#dream-revision-confirm` (`1`) and `#dream-revision-rollback` (`2`).
-- Confirm keeps the preview. Rollback restores the previous spec and refunds `50 数据金` through `addMoney(..., 'dream_furniture_revision_refund')`.
-- During pending revision confirmation, `isDreamRevisionPending()` blocks normal E/F interactions, hides normal interaction prompts, disables top/touch UI pointer events with `body.dream-revision-pending`, and `constrainPendingRevisionPlayer()` keeps the player inside dream-room bounds.
-- Position auto-placement moved out of the edit overlay into `#dream-placement-editor-panel`, opened by `#dream-object-placement` in the object-control button cluster. `#dream-editor-placement` and `#dream-editor-auto-place` are now scoped to that placement overlay.
-- `controls.js` overlay ids include `dream-placement-editor-panel`; `src/_logos/dream_gpt.svg` is the local GPT-style icon used for the placement button.
+- `#settings-panel`
+- `#api-key`
+- `#base-url`
+- `#model-name`
+- `#settings-save`
+- `#settings-close`
+
+历史：
+
+- `#history-panel`
+- `#history-list`
+- `#date-history-list`
+- `#history-date-filter`
+- `#history-close`
+
+约会：
+
+- `#date-panel`
+- `#date-close`
+- `#date-locations`
+- `#date-chat`
+- `#date-chat-title`
+- `#date-chat-area`
+- `#date-input`
+- `#date-send-btn`
+- `#date-back-btn`
+- `#date-new-topic-btn`
+
+礼物：
+
+- `#gift-terminal-panel`
+- `#gift-terminal-close`
+- `#gift-balance`
+- `#gift-description`
+- `#gift-evaluate-btn`
+- `#gift-status`
+- `#gift-pending`
+- `#gift-pay-btn`
+- `#gift-result`
+- `#gift-collection-panel`
+- `#gift-collection-close`
+- `#gift-collection-list`
+
+成就：
+
+- `#achievements-panel`
+- `#achievements-close`
+- `#achievement-summary`
+- `#achievement-list`
+- `#achievement-toast-host`
+
+造梦终端：
+
+- `#dream-terminal-panel`
+- `#dream-terminal-close`
+- `#dream-balance`
+- `#dream-furniture-description`
+- `#dream-placement-input`
+- `#dream-create-button`
+- `#dream-progress`
+- `#dream-progress-fill`
+- `#dream-status`
+
+家具快捷编辑：
+
+- `#dream-object-controls`
+- `#dream-object-move-forward`
+- `#dream-object-move-back`
+- `#dream-object-move-left`
+- `#dream-object-move-right`
+- `#dream-object-rotate-left`
+- `#dream-object-rotate-right`
+- `#dream-object-reset`
+- `#dream-object-delete`
+- `#dream-object-placement`
+- `#dream-object-edit`
+- `#dream-object-close`
+- `#dream-screen-toast`
+
+家具编辑 overlay：
+
+- `#dream-furniture-editor-panel`
+- `#dream-editor-close`
+- `#dream-editor-title`
+- `#dream-editor-meta`
+- `#dream-editor-name`
+- `#dream-editor-save-name`
+- `#dream-editor-style-balance`
+- `#dream-editor-style-instruction`
+- `#dream-editor-style-apply`
+- `#dream-editor-style-progress`
+- `#dream-editor-style-progress-fill`
+- `#dream-editor-status`
+
+家具位置 overlay：
+
+- `#dream-placement-editor-panel`
+- `#dream-placement-editor-close`
+- `#dream-editor-placement`
+- `#dream-editor-auto-place`
+
+样式修改确认：
+
+- `#dream-revision-confirm-bar`
+- `#dream-revision-confirm`
+- `#dream-revision-rollback`
+
+移动端：
+
+- `#touch-controls`
+- `#joystick-move`
+- `#joystick-move-knob`
+- `#btn-interact`
+- `#btn-look`
+
+睡眠：
+
+- `#sleep-ui`
+- `#btn-pet`
+- `#btn-wake`
+
+换装和挂画：
+
+- `#model-selector`
+- `#model-list`
+- `#model-close`
+- `#painting-upload`
+
+## localStorage Key
+
+- `fritia-settings`：API 设置。
+- `fritia_game_state`：游戏时间、数据金、好感、统计、礼物。
+- `fritia_chat_history`：日常对话历史。
+- `fritia_date_history`：约会对话历史。
+- `fritia_achievements`：成就解锁与通知状态。
+- `fritia_painting`：挂画图片 data URL。
+- `fritia_dream_furniture`：造梦家具记录数组。
+
+造梦家具记录：
+
+```json
+{
+  "id": "dream_xxx",
+  "name": "星光阅读沙发",
+  "category": "seat",
+  "description": "规范化描述",
+  "playerDescription": "玩家制造时输入的原始描述",
+  "spec": {},
+  "pose": {
+    "position": { "x": 8, "y": 0, "z": 1 },
+    "rotationY": 0
+  },
+  "createdAt": "ISO 时间",
+  "gameDateTime": "游戏内日期时间",
+  "revisionCount": 0,
+  "lastDialogueAt": 0
+}
+```
+
+## 自定义事件
+
+- `fritia-action`
+  - 来源：移动端触控按钮。
+  - detail：`{ code }`，例如 `KeyE`、`KeyF`。
+- `fritia-overlay-closed`
+  - 来源：各 overlay 关闭。
+  - detail：`{ id }`。
+  - 用途：恢复控制模式和清理互动状态。
+- `fritia-game-state-updated`
+  - 来源：数据金变化、统计变化、礼物变化。
+  - detail 可包含 `{ moneyDelta, reason }`。
+- `fritia-affinity-updated`
+  - 来源：好感变化。
+  - detail：`{ delta }`。
+- `fritia-dream-furniture-visited`
+  - 来源：角色到达动态家具 waypoint。
+  - detail：`{ furnitureId, name, description, category, dialogueTags }`。
+
+## 导出/导入 JSON
+
+导出字段：
+
+- `version`
+- `exportedAt`
+- `exportedGameTime`
+- `gameState`
+- `money`
+- `affinity`
+- `stats`
+- `achievements`
+- `gifts`
+- `dreamFurniture`
+- `settings`
+- `conversationHistory`
+- `dateConversationHistory`
+- `painting`
+
+导入策略：
+
+- `gameState` 使用 `importGameState()` 规范化。
+- `conversationHistory`、`dateConversationHistory` 覆盖式导入。
+- `dreamFurniture` 按 `id` 去重合并，坏 spec 或不安全摆放会跳过，不中断整体导入。
+- `achievements` 合并 timestamp。
+- `settings` 和 `painting` 若存在则导入。
+
+## UI 和样式约定：`css/style.css`
+
+约定：
+
+- overlay 使用深色半透明玻璃质感。
+- 打开 overlay 前释放控制模式，关闭时派发 `fritia-overlay-closed`。
+- 移动端输入框字号不低于 `16px`，避免 iOS 自动放大。
+- 成就 toast 使用最高层级，覆盖其他 overlay。
+- 造梦家具快捷按钮是投影到 3D 实体中心的轻量圆形按钮。
+- `body.dream-revision-pending` 会禁用普通交互提示和非确认/回退 UI。
+
+主要样式区域：
+
+- 基础 HUD、准星、提示按钮。
+- 设置、历史、日常对话、约会、礼物、成就 overlay。
+- 造梦终端大型面板。
+- 造梦家具快捷控制。
+- 家具编辑、位置调整、样式修改确认条。
+- 芙提雅头顶气泡。
+- 移动端适配媒体查询。
+
+## 资源约定
+
+- `src/_queries/system_prompt.txt`：芙提雅核心人格设定，日常对话和家具台词都应使用。
+- `src/_queries/date_prompt.txt`：约会系统提示词。
+- `src/_logos/dream_*.svg`：造梦终端、家具编辑、推拉门等图标。
+- `src/_logos/achievement_*.svg`, `src/_logos/ach_*.svg`：成就系统图标。
+- `src/_voices/achievement_complete.mp3`：成就解锁音效。
+- `src/_voices/talk_*.mp3`：日常互动语音。
+- `src/_voices/sleep_*`：睡眠模式音频。
+
+## 交互规则
+
+按 E：
+
+- 睡眠模式：起床，不受视线遮挡规则影响。
+- 看向造梦空间推拉门：开门/关门。
+- 看向造梦终端：打开造梦终端。
+- 看向造梦家具：打开家具快捷编辑。
+- 看向购物终端：打开礼物终端。
+- 看向礼物收藏柜：打开礼物收藏。
+- 看向床：进入睡眠。
+- 看向书桌或约会门：打开约会。
+- 看向挂画：上传图片。
+- 看向衣柜：换装。
+
+视线遮挡：
+
+- 除睡眠起床外，旧房间 E 交互实体、新房间造梦终端、造梦家具和造梦门均要求玩家视角能直接看到目标。
+- 目标和玩家之间如有碰撞体阻挡，不显示提示，也不触发。
+
+按 F：
+
+- 接近芙提雅并处于操作模式：进入日常对话。
+- 睡眠模式：摸头。
+- 已在日常互动中：退出互动。
+
+Escape：
+
+- 优先关闭造梦、礼物、成就、约会、日常对话、换装面板。
+
+## 手动测试清单
+
+基础：
+
+1. `npm run dev` 启动并进入游戏。
+2. 旧卧室正常显示，床、桌、椅、衣柜、挂画、窗户、购物终端可见。
+3. HUD 中时间、好感度、数据金分行显示。
+4. 鼠标锁定和移动端触控基础操作可用。
+5. 未点击开局界面前，芙提雅停在初始位置不随机移动；点击进入操作模式后先完成挥手欢迎，再开始后续行动。
+
+共享墙和门：
+
+1. 新旧房间之间的共享墙应是一整面厚墙分段，不再出现额外凸出的墙块。
+2. 门洞上方有墙体，不透明，不漏空。
+3. 共享墙高度顶到天花板，Z 方向覆盖造梦空间完整宽度。
+4. 旧房间侧墙面只轻微加厚，不遮挡购物终端。
+5. 推拉门关闭时阻挡玩家和角色。
+6. 推拉门打开时门板滑入负 Z 侧墙体内部，玩家和角色可通过。
+7. 门打开后准星对准门洞仍能按 E 关门，且不会穿透触发门后实体。
+
+旧功能回归：
+
+1. 购物终端可打开礼物系统。
+2. 礼物收藏柜可打开收藏列表。
+3. 日常对话、约会、换装、睡觉、挂画仍可用。
+4. 成就解锁 toast 位于最顶层并播放音效。
+5. 导出再导入不破坏旧功能。
+
+造梦家具：
+
+1. 看向造梦终端按 E 打开“造梦-家具打造终端”。
+2. 未配置 API Key 时制造失败且不扣钱。
+3. 余额不足时不调用 LLM 且不扣钱。
+4. 合法 LLM JSON 生成家具后，扣除 500 数据金、增加 5 好感度并刷新 HUD。
+5. 新生成的桌、床、柜等家具上下关系正确；桌腿不会被整体倒扣到桌面上方。
+6. 复杂家具 JSON 不应因本地 `max_tokens` 上限被截断。
+7. 家具不穿墙、不堵门、不挡窗、不与已有家具重叠。
+8. 刷新页面后家具恢复。
+9. 导出/导入后家具恢复。
+10. 看向家具按 E 显示快捷编辑按钮。
+11. 移动、旋转、重置、删除流程可用。
+12. 删除家具退回 400 数据金并在 HUD 显示 `+400`。
+13. 样式修改成功后显示 `[1] 确认` 和 `[2] 回退`。
+14. 确认样式修改后该家具 `revisionCount` 增加，连续 3 次确认可触发“完美主义”。
+15. 回退样式恢复原 spec 并退回 50 数据金。
+16. 样式修改后玩家和芙提雅碰撞体同步更新。
+17. 造梦空间内存在家具达到 5 件时触发“布置爱巢”。
+
+角色：
+
+1. 玩家进入造梦空间后，芙提雅通过门步行进入新房间；寻路失败时才瞬移。
+2. 玩家回旧房间后，芙提雅回到旧房间并只在旧房间 waypoint 中移动。
+3. 芙提雅能绕开动态家具。
+4. 芙提雅访问动态家具时，若在视野内且满足冷却/概率，头顶显示家具台词气泡。
+5. 床和椅子的坐姿位于正确边缘，不悬空、不突然长距离滑移。
+
+## 已知限制
+
+- 造梦家具由基础 primitive 程序化构建，不支持外部贴图 URL 或任意模型导入。
+- LLM 可能返回不稳定 JSON；当前策略是严格校验并提示玩家重试。
+- 造梦家具摆放是本地候选点搜索，不是完整物理引擎。
+- 芙提雅寻路是轻量网格 A*，复杂迷宫家具可能仍需要短暂穿模兜底。
+- 浏览器端直接调用 OpenAI 兼容 API 会受 CORS 限制；需要服务商 API 支持浏览器跨域访问。
