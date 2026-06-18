@@ -3234,6 +3234,9 @@ body.dream-revision-pending .touch-actions {
     z-index: 20;
     pointer-events: none;
     padding: 20px;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 #touch-controls.active {
@@ -3250,6 +3253,7 @@ body.dream-revision-pending .touch-actions {
     border-radius: 50%;
     position: relative;
     pointer-events: auto;
+    touch-action: none;
 }
 
 .joystick-knob {
@@ -3269,6 +3273,7 @@ body.dream-revision-pending .touch-actions {
     display: flex;
     gap: 12px;
     pointer-events: auto;
+    touch-action: none;
 }
 
 .touch-btn {
@@ -3285,6 +3290,7 @@ body.dream-revision-pending .touch-actions {
     font-weight: bold;
     letter-spacing: 0.05em;
     cursor: pointer;
+    touch-action: none;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
 }

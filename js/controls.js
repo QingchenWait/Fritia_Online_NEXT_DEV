@@ -20,6 +20,40 @@ function supportsPointerLock(domElement) {
         && 'pointerLockElement' in doc;
 }
 
+const POINTER_LOCK_MAX_LOOK_STEP = 70;
+const POINTER_LOCK_HARD_SPIKE = 260;
+const MANUAL_LOOK_MAX_STEP = 80;
+const MANUAL_LOOK_HARD_SPIKE = 260;
+const TOUCH_LOOK_MAX_STEP = 46;
+const TOUCH_LOOK_HARD_SPIKE = 180;
+const POINTER_LOCK_SUPPRESS_MS = 90;
+
+function nowMs() {
+    return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+}
+
+function isLookDeltaSpike(deltaX, deltaY, maxDelta) {
+    const dx = Number(deltaX);
+    const dy = Number(deltaY);
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return true;
+    return Math.abs(dx) > maxDelta
+        || Math.abs(dy) > maxDelta
+        || Math.hypot(dx, dy) > maxDelta * 1.45;
+}
+
+function normalizeLookDelta(deltaX, deltaY, maxStep, hardSpike) {
+    const dx = Number(deltaX);
+    const dy = Number(deltaY);
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+    if (isLookDeltaSpike(dx, dy, hardSpike)) return null;
+    const length = Math.hypot(dx, dy);
+    if (length > maxStep && length > 0.0001) {
+        const scale = maxStep / length;
+        return { x: dx * scale, y: dy * scale };
+    }
+    return { x: dx, y: dy };
+}
+
 export function initControls(camera, domElement, colliders) {
     const pointerLockSupported = supportsPointerLock(domElement);
     const controls = new PointerLockControls(camera, domElement);
@@ -55,6 +89,28 @@ export function initControls(camera, domElement, colliders) {
     ];
     let resumeAfterOverlay = false;
     let resumeInProgress = false;
+    let suppressPointerLookUntil = 0;
+    let resetTouchInputState = () => {};
+
+    function suppressPointerLook(ms = POINTER_LOCK_SUPPRESS_MS) {
+        suppressPointerLookUntil = Math.max(suppressPointerLookUntil, nowMs() + ms);
+    }
+
+    function filterPointerLockMouseMove(event) {
+        const doc = domElement.ownerDocument;
+        if (state.useTouchControls || doc.pointerLockElement !== domElement || !state.isLocked) return;
+        const dx = Number(event.movementX) || 0;
+        const dy = Number(event.movementY) || 0;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (nowMs() < suppressPointerLookUntil) return;
+        const normalized = normalizeLookDelta(dx, dy, POINTER_LOCK_MAX_LOOK_STEP, POINTER_LOCK_HARD_SPIKE);
+        if (normalized) {
+            applyLookDelta(normalized.x, normalized.y, 0.002);
+        }
+    }
+
+    document.addEventListener('mousemove', filterPointerLockMouseMove, true);
 
     function isOverlayOpen() {
         return overlayIds.some(id => {
@@ -93,6 +149,7 @@ export function initControls(camera, domElement, colliders) {
     function enterControlMode() {
         resumeAfterOverlay = false;
         resumeInProgress = false;
+        resetTouchInputState();
         state.isLocked = true;
         syncEntryPrompt();
         document.getElementById('crosshair').classList.add('active');
@@ -104,12 +161,14 @@ export function initControls(camera, domElement, colliders) {
     function leaveControlMode() {
         state.isLocked = false;
         clearMovementState();
+        resetTouchInputState();
         document.getElementById('crosshair').classList.remove('active');
         document.getElementById('touch-controls').classList.remove('active');
         syncEntryPrompt();
     }
 
     controls.addEventListener('lock', () => {
+        suppressPointerLook();
         enterControlMode();
     });
 
@@ -136,7 +195,8 @@ export function initControls(camera, domElement, colliders) {
     });
 
     const clickToPlay = document.getElementById('click-to-play');
-    clickToPlay.addEventListener('click', () => {
+    clickToPlay.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (!state.useTouchControls) {
             if (pointerLockSupported) {
                 controls.lock();
@@ -159,9 +219,29 @@ export function initControls(camera, domElement, colliders) {
         }
     });
 
+    function resetTransientInput() {
+        clearMovementState();
+        resetTouchInputState();
+        suppressPointerLook(160);
+    }
+
+    window.addEventListener('resize', resetTransientInput);
+    window.addEventListener('orientationchange', resetTransientInput);
+    window.addEventListener('blur', () => {
+        resetTransientInput();
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) resetTransientInput();
+        else suppressPointerLook(160);
+    });
+
     if (state.useTouchControls) {
-        initTouchJoystick(state);
-        initTouchLook(controls, state);
+        const resetJoystick = initTouchJoystick(state);
+        const resetLook = initTouchLook(controls, state, rotateView);
+        resetTouchInputState = () => {
+            resetJoystick?.();
+            resetLook?.();
+        };
         initTouchButtons(state);
     }
 
@@ -273,13 +353,19 @@ export function initControls(camera, domElement, colliders) {
         clearMovementState();
     }
 
-    function rotateView(deltaX, deltaY) {
-        const sensitivity = 0.002;
+    function applyLookDelta(deltaX, deltaY, sensitivity) {
         lookEuler.setFromQuaternion(controls.object.quaternion);
         lookEuler.y -= deltaX * sensitivity;
         lookEuler.x -= deltaY * sensitivity;
         lookEuler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lookEuler.x));
         controls.object.quaternion.setFromEuler(lookEuler);
+    }
+
+    function rotateView(deltaX, deltaY) {
+        const normalized = normalizeLookDelta(deltaX, deltaY, MANUAL_LOOK_MAX_STEP, MANUAL_LOOK_HARD_SPIKE);
+        if (!normalized) return false;
+        applyLookDelta(normalized.x, normalized.y, 0.002);
+        return true;
     }
 
     function blurActiveOverlayElement() {
@@ -291,6 +377,7 @@ export function initControls(camera, domElement, colliders) {
 
     function requestPointerLockForResume() {
         try {
+            suppressPointerLook();
             const result = domElement.requestPointerLock();
             if (result && typeof result.catch === 'function') {
                 result.catch(() => {
@@ -400,10 +487,19 @@ export function initControls(camera, domElement, colliders) {
 function initTouchJoystick(state) {
     const joystick = document.getElementById('joystick-move');
     const knob = document.getElementById('joystick-move-knob');
-    if (!joystick || !knob) return;
+    if (!joystick || !knob) return () => {};
 
     let touchId = null;
     const maxDist = 35;
+
+    function resetJoystick() {
+        touchId = null;
+        knob.style.transform = 'translate(-50%, -50%)';
+        state.moveForward = false;
+        state.moveBackward = false;
+        state.moveLeft = false;
+        state.moveRight = false;
+    }
 
     joystick.addEventListener('touchstart', (e) => {
         e.preventDefault();
@@ -411,35 +507,31 @@ function initTouchJoystick(state) {
         const touch = e.changedTouches[0];
         touchId = touch.identifier;
         updateJoystick(touch);
-    });
+    }, { passive: false });
 
     document.addEventListener('touchmove', (e) => {
         if (touchId === null) return;
+        e.preventDefault();
         for (const touch of e.changedTouches) {
             if (touch.identifier === touchId) {
                 updateJoystick(touch);
                 break;
             }
         }
-    });
+    }, { passive: false });
 
     function endJoystickTouch(e) {
         if (touchId === null) return;
         for (const touch of e.changedTouches) {
             if (touch.identifier === touchId) {
-                touchId = null;
-                knob.style.transform = 'translate(-50%, -50%)';
-                state.moveForward = false;
-                state.moveBackward = false;
-                state.moveLeft = false;
-                state.moveRight = false;
+                resetJoystick();
                 break;
             }
         }
     }
 
-    document.addEventListener('touchend', endJoystickTouch);
-    document.addEventListener('touchcancel', endJoystickTouch);
+    document.addEventListener('touchend', endJoystickTouch, { passive: false });
+    document.addEventListener('touchcancel', endJoystickTouch, { passive: false });
 
     function updateJoystick(touch) {
         const rect = joystick.getBoundingClientRect();
@@ -462,17 +554,23 @@ function initTouchJoystick(state) {
         state.moveLeft = dx < -threshold;
         state.moveRight = dx > threshold;
     }
+
+    return resetJoystick;
 }
 
-function initTouchLook(controls, state) {
+function initTouchLook(controls, state, rotateView) {
     const canvas = document.getElementById('game-canvas');
-    if (!canvas) return;
+    if (!canvas) return () => {};
 
     let touchId = null;
     let lastX = 0;
     let lastY = 0;
-    const sensitivity = 0.003;
-    let euler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+    function resetLookTouch() {
+        touchId = null;
+        lastX = 0;
+        lastY = 0;
+    }
 
     canvas.addEventListener('touchstart', (e) => {
         if (!state.isLocked) return;
@@ -486,15 +584,17 @@ function initTouchLook(controls, state) {
             if (target.closest('#joystick-move') || target.closest('.touch-actions')) continue;
             
             if (touchId === null) {
+                e.preventDefault();
                 touchId = touch.identifier;
                 lastX = touch.clientX;
                 lastY = touch.clientY;
             }
         }
-    });
+    }, { passive: false });
 
     document.addEventListener('touchmove', (e) => {
         if (touchId === null || !state.isLocked) return;
+        e.preventDefault();
         for (const touch of e.changedTouches) {
             if (touch.identifier === touchId) {
                 const dx = touch.clientX - lastX;
@@ -502,28 +602,28 @@ function initTouchLook(controls, state) {
                 lastX = touch.clientX;
                 lastY = touch.clientY;
 
-                euler.setFromQuaternion(controls.object.quaternion);
-                euler.y -= dx * sensitivity;
-                euler.x -= dy * sensitivity;
-                euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
-                controls.object.quaternion.setFromEuler(euler);
+                const normalized = normalizeLookDelta(dx, dy, TOUCH_LOOK_MAX_STEP, TOUCH_LOOK_HARD_SPIKE);
+                if (!normalized) break;
+                rotateView?.(normalized.x * 1.5, normalized.y * 1.5);
                 break;
             }
         }
-    });
+    }, { passive: false });
 
     function endLookTouch(e) {
         if (touchId === null) return;
         for (const touch of e.changedTouches) {
             if (touch.identifier === touchId) {
-                touchId = null;
+                resetLookTouch();
                 break;
             }
         }
     }
 
-    document.addEventListener('touchend', endLookTouch);
-    document.addEventListener('touchcancel', endLookTouch);
+    document.addEventListener('touchend', endLookTouch, { passive: false });
+    document.addEventListener('touchcancel', endLookTouch, { passive: false });
+
+    return resetLookTouch;
 }
 
 function initTouchButtons(state) {

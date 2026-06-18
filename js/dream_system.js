@@ -784,8 +784,9 @@ function bindObjectLookDrag() {
         const dx = event.clientX - lastLookDrag.x;
         const dy = event.clientY - lastLookDrag.y;
         lastLookDrag = { x: event.clientX, y: event.clientY };
-        controlsModule?.rotateView?.(dx, dy);
-        positionObjectControls();
+        if (controlsModule?.rotateView?.(dx, dy) !== false) {
+            positionObjectControls();
+        }
     });
     const endDrag = (event) => {
         if (lookDragPointerId !== event.pointerId) return;
@@ -794,6 +795,9 @@ function bindObjectLookDrag() {
     };
     els.objectControls.addEventListener('pointerup', endDrag);
     els.objectControls.addEventListener('pointercancel', endDrag);
+    els.objectControls.addEventListener('lostpointercapture', () => {
+        lookDragPointerId = null;
+    });
 }
 
 function bindMoveHold(id, intent) {
