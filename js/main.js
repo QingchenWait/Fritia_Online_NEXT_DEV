@@ -310,6 +310,7 @@ async function init() {
 }
 
 function onKeyDown(e) {
+    igniteForKey(e.code);
     if (isRoomPanoramaActive()) {
         if (e.code === 'Escape' || e.code === 'KeyE') exitRoomPanorama();
         return;
@@ -1042,6 +1043,43 @@ function initPromptButtons() {
         if (dreamPaintingPrompt.classList.contains('hidden')) return;
         handlePromptTap(e, 'Digit1');
     }, { passive: false });
+}
+
+/* ===== 按键提示「点燃」效果 =====
+   触控点击提示按钮会经 handlePromptTap → onKeyDown，物理按键也走 onKeyDown，
+   因此只需在 onKeyDown 顶部按键位点亮当前可见的对应提示，触控/按键统一覆盖。 */
+function firstVisiblePrompt(ids) {
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getClientRects().length > 0) return el;
+    }
+    return null;
+}
+
+function ignitePrompt(el) {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width && !rect.height) return;
+    el.classList.add('igniting');
+    setTimeout(() => el.classList.remove('igniting'), 560);
+    const burst = document.createElement('div');
+    burst.className = 'ignite-burst';
+    burst.style.left = `${rect.left + rect.width / 2}px`;
+    burst.style.top = `${rect.top + rect.height / 2}px`;
+    document.body.appendChild(burst);
+    setTimeout(() => burst.remove(), 650);
+}
+
+function igniteForKey(code) {
+    let el = null;
+    if (code === 'KeyF') {
+        el = firstVisiblePrompt(['interaction-prompt', 'btn-pet']);
+    } else if (code === 'KeyE') {
+        el = firstVisiblePrompt(['painting-prompt', 'interaction-prompt', 'btn-wake']);
+    } else if (code === 'Digit1' || code === 'Numpad1') {
+        el = firstVisiblePrompt(['dream-painting-prompt']);
+    }
+    if (el) ignitePrompt(el);
 }
 
 function initPainting() {

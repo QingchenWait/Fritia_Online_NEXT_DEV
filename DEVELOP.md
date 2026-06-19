@@ -28,11 +28,18 @@ Fritia Online NEXT 是一个纯静态网页 3D 互动应用：
 fritia_online_v3/
 ├── AGENTS.md
 ├── DEVELOP.md
+├── UI_STYLE.md
 ├── README.md
 ├── index.html
 ├── package.json
 ├── css/
-│   └── style.css
+│   ├── tokens.css         # 设计令牌(:root 变量)
+│   ├── base.css           # 基座 + 保留不变的 HUD(#game-status/#top-bar/#dream-object-controls)
+│   ├── components.css     # 共享组件(.ui-overlay/.otome-panel/.btn/字段/chip/custom-select/滚动条)
+│   ├── effects.css        # 动画与点燃光效
+│   ├── panels.css         # 各浮层专属样式 + 浮层 z-index
+│   ├── responsive.css     # 响应式与移动端
+│   └── style.css          # 兼容入口(仅 @import 上述模块)
 ├── js/
 │   ├── achievements.js
 │   ├── character.js
@@ -52,6 +59,7 @@ fritia_online_v3/
 └── src/
     ├── snowbreak_logo.png
     ├── sample_screenshot.png
+    ├── _ui/                # UI 重制美术资源(原创手绘 SVG)：角标/分隔/光效/花瓣/火花/暖色头图标
     ├── _queries/
     │   ├── system_prompt.txt
     │   └── date_prompt.txt
@@ -903,29 +911,27 @@ DOM ID：
 - `achievements` 合并 timestamp。
 - `settings` 和 `painting` 若存在则导入。
 
-## UI 和样式约定：`css/style.css`
+## UI 和样式约定：模块化 CSS（暖色少女 Otome）
+
+> 2026-06-19 起，UI 已完全重制为**暖色少女 Otome 风格**并拆分为模块化 CSS。
+> 设计语言、令牌、组件、文件结构、点燃效果与 JS 耦合清单详见仓库根 **`UI_STYLE.md`**（接手必读）。
 
 约定：
 
-- overlay 使用深色半透明玻璃质感。
-- 打开 overlay 前释放控制模式，关闭时派发 `fritia-overlay-closed`。
-- 移动端输入框字号不低于 `16px`，避免 iOS 自动放大。
+- CSS 拆分为 `tokens/base/components/effects/panels/responsive` 六个模块，`index.html` 按序 link（带 `?v=` 版本号）；`css/style.css` 仅作 `@import` 兼容入口。改主题只动 `tokens.css`。
+- 浮层分两层表面：**亮面浮层**（奶油磨砂 + 深色文字，菜单类）与**场景层 HUD**（半透暖玻璃 + 浅色文字，如对话框/提示/全景/气泡），共用同一套玫瑰+金点缀系统。
+- 新增浮层用统一骨架：外层保留 `id` 并加 `.ui-overlay`，内层用 `.otome-panel`（含头部 `__head/__icon/__titles/__kicker/__title/__close`、`__body`、可选 `__foot`）；按钮用 `.btn(--primary/--gold/--ghost/--danger)`。
+- 打开 overlay 前释放控制模式，关闭时派发 `fritia-overlay-closed`；新浮层 `id` 必须加入 `controls.js` overlay 列表，并在 `panels.css` 设 `z-index`（沿用既有层级）。
+- 移动端输入框字号不低于 `16px`（组件默认 16px）。
 - 成就 toast 使用最高层级，覆盖其他 overlay。
-- 造梦家具快捷按钮是投影到 3D 实体中心的轻量圆形按钮。
+- **保持不变**三处（视觉零改动，规则原样保留在 `base.css`/`responsive.css`）：`#top-bar`、`#game-status`、`#dream-object-controls`（造梦家具快捷圆形按钮）。
 - `body.dream-revision-pending` 会禁用普通交互提示和非确认/回退 UI。
-
-主要样式区域：
-
-- 基础 HUD、准星、提示按钮。
-- 设置、历史、日常对话、约会、礼物、成就 overlay。
-- 造梦终端大型面板。
-- 造梦家具快捷控制。
-- 家具编辑、位置调整、样式修改确认条。
-- 芙提雅头顶气泡。
-- 移动端适配媒体查询。
+- 按键提示按钮统一加 `.kbd-prompt`；触发（按键或触控）时由 `main.js#ignitePrompt()` 播放「点燃」光效（辉光 + 火花 `src/_ui/spark.svg`）。
+- **重构 HTML 时必须保留所有 `id` 和 JS 动态读写/生成的 class**（清单见 `UI_STYLE.md` 第 7 节），否则功能损坏。
 
 ## 资源约定
 
+- `src/_ui/`：UI 重制（暖色 Otome）美术资源，全部为原创手绘 SVG（角标 `frame_corner`、分隔 `divider_heart`、柔光 `glow_soft`、背景 `bokeh`、纸纹 `panel_grain`、花瓣 `petal`、火花 `spark`、心标 `heart_motif`、关闭 `icon_close`、各浮层头图标 `icon_*`）。清单见 `src/_ui/README.md`，设计说明见 `UI_STYLE.md`。
 - `src/_queries/system_prompt.txt`：芙提雅核心人格设定，日常对话和家具台词都应使用。
 - `src/_queries/date_prompt.txt`：约会系统提示词。
 - `src/_logos/dream_*.svg`：造梦终端、家具编辑、推拉门等图标。

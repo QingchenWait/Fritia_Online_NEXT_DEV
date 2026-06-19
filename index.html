@@ -2,9 +2,14 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>芙提雅 Online NEXT</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/tokens.css?v=20260619-otome">
+    <link rel="stylesheet" href="css/base.css?v=20260619-otome">
+    <link rel="stylesheet" href="css/components.css?v=20260619-otome">
+    <link rel="stylesheet" href="css/effects.css?v=20260619-otome">
+    <link rel="stylesheet" href="css/panels.css?v=20260619-otome">
+    <link rel="stylesheet" href="css/responsive.css?v=20260619-otome">
     <script type="importmap">
     {
         "imports": {
@@ -44,23 +49,33 @@
         <button class="room-panorama-side left" id="room-panorama-prev" aria-label="切换到左侧视角">‹</button>
         <button class="room-panorama-side right" id="room-panorama-next" aria-label="切换到右侧视角">›</button>
         <div class="room-panorama-bottom">
-            <button id="room-panorama-capture" aria-label="拍摄并下载全景截图">
+            <button id="room-panorama-capture" class="btn btn--primary" aria-label="拍摄并下载全景截图">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M7.5 5.5 9 3.8h6l1.5 1.7H20a2 2 0 0 1 2 2v10.2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2h3.5Zm4.5 11a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4Zm0-1.7a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/>
                 </svg>
                 <span>拍摄房间</span>
             </button>
-            <button id="room-panorama-close" aria-label="退出全景拍照模式">退出</button>
+            <button id="room-panorama-close" class="btn btn--ghost" aria-label="退出全景拍照模式">退出</button>
         </div>
     </div>
 
     <input type="file" id="painting-upload" accept="image/*" style="display:none">
 
-    <div id="model-selector" class="hidden">
-        <div class="model-selector-inner">
-            <h3>芙提雅换装</h3>
-            <div id="model-list"></div>
-            <button id="model-close">关闭</button>
+    <div id="model-selector" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--sm">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_wardrobe.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">WARDROBE</span>
+                    <h2 class="otome-panel__title">芙提雅换装</h2>
+                </div>
+                <button id="model-close" class="otome-panel__close" aria-label="关闭换装">
+                    <img src="src/_ui/icon_close.svg" alt="">
+                </button>
+            </div>
+            <div class="otome-panel__body">
+                <div id="model-list"></div>
+            </div>
         </div>
     </div>
 
@@ -82,13 +97,13 @@
             <div id="money-display">数据金 | 🪙 40,000</div>
             <div id="salary-toast" class="hidden"></div>
         </div>
-        <div id="interaction-prompt" class="hidden" role="button" tabindex="0">
+        <div id="interaction-prompt" class="kbd-prompt hidden" role="button" tabindex="0">
             按 <kbd>F</kbd> 与芙提雅对话
         </div>
-        <div id="painting-prompt" class="hidden" role="button" tabindex="0">
+        <div id="painting-prompt" class="kbd-prompt hidden" role="button" tabindex="0">
             按 <kbd>E</kbd> 更换挂画
         </div>
-        <div id="dream-painting-prompt" class="hidden" role="button" tabindex="0">
+        <div id="dream-painting-prompt" class="kbd-prompt hidden" role="button" tabindex="0">
             按 <kbd>1</kbd> 替换图片
         </div>
         <div id="achievement-toast-host"></div>
@@ -137,7 +152,7 @@
         </div>
         <div id="dream-screen-toast" class="hidden" aria-live="polite"></div>
         <div id="click-to-play" class="hidden">
-            点击屏幕进入操作模式
+            <span class="click-to-play-inner">点击屏幕进入操作模式</span>
         </div>
     </div>
 
@@ -151,7 +166,7 @@
             </div>
             <div id="dialogue-input-area">
                 <input type="text" id="dialogue-input" placeholder="说点什么..." autocomplete="off">
-                <button id="dialogue-send">
+                <button id="dialogue-send" class="btn btn--primary">
                     <span>发送</span>
                 </button>
             </div>
@@ -181,54 +196,75 @@
     </div>
     <input type="file" id="import-file" accept=".json" style="display:none">
 
-    <div id="achievements-panel" class="hidden">
-        <div class="achievements-shell">
-            <div class="achievements-hero">
-                <div class="achievements-mark">
-                    <img src="src/_logos/achievement_trophy.svg" alt="">
-                </div>
-                <div>
-                    <div class="achievements-kicker">Fritia Online NEXT</div>
-                    <h2>成就列表</h2>
-                    <p>记录你和芙提雅共同完成的关键时刻。</p>
+    <div id="achievements-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--xl achievements-shell">
+            <div class="otome-panel__head achievements-hero">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_achievement.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">ACHIEVEMENTS</span>
+                    <h2 class="otome-panel__title">成就列表</h2>
+                    <p class="otome-panel__sub">记录你和芙提雅共同完成的关键时刻。</p>
                 </div>
                 <div class="achievements-summary">
-                    <span id="achievement-summary">0/15</span>
+                    <span id="achievement-summary">0/17</span>
                     <small>已解锁</small>
                 </div>
-                <button id="achievements-close" aria-label="关闭成就列表">×</button>
+                <button id="achievements-close" class="otome-panel__close" aria-label="关闭成就列表">
+                    <img src="src/_ui/icon_close.svg" alt="">
+                </button>
             </div>
-            <div id="achievement-list"></div>
-        </div>
-    </div>
-
-    <div id="settings-panel" class="hidden">
-        <div class="settings-inner">
-            <h3>对话模型设置 (OpenAI 格式)</h3>
-            <p class="settings-note">数据仅本地存储，不会上传云端</p>
-            <div class="setting-item">
-                <label for="api-key">API Key</label>
-                <input type="password" id="api-key" placeholder="sk-...">
-            </div>
-            <div class="setting-item">
-                <label for="base-url">Base URL</label>
-                <input type="text" id="base-url" placeholder="https://api.openai.com/v1">
-            </div>
-            <div class="setting-item">
-                <label for="model-name">模型名称</label>
-                <input type="text" id="model-name" placeholder="gpt-4o-mini">
-            </div>
-            <div class="settings-actions">
-                <button id="settings-save">保存</button>
-                <button id="settings-close">关闭</button>
+            <div class="otome-panel__body">
+                <div id="achievement-list"></div>
             </div>
         </div>
     </div>
 
-    <div id="history-panel" class="hidden">
-        <div class="history-inner">
-            <div class="history-header">
-                <h3>历史对话</h3>
+    <div id="settings-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--sm">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_settings.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">CONNECTION</span>
+                    <h2 class="otome-panel__title">对话模型设置</h2>
+                    <p class="otome-panel__sub">OpenAI 兼容格式 · 数据仅本地存储，不会上传云端</p>
+                </div>
+                <button id="settings-close" class="otome-panel__close" aria-label="关闭设置">
+                    <img src="src/_ui/icon_close.svg" alt="">
+                </button>
+            </div>
+            <div class="otome-panel__body">
+                <div class="otome-field">
+                    <label class="otome-field-label" for="api-key">API Key</label>
+                    <input type="password" id="api-key" placeholder="sk-...">
+                </div>
+                <div class="otome-field">
+                    <label class="otome-field-label" for="base-url">Base URL</label>
+                    <input type="text" id="base-url" placeholder="https://api.openai.com/v1">
+                </div>
+                <div class="otome-field">
+                    <label class="otome-field-label" for="model-name">模型名称</label>
+                    <input type="text" id="model-name" placeholder="gpt-4o-mini">
+                </div>
+            </div>
+            <div class="otome-panel__foot">
+                <button id="settings-save" class="btn btn--primary">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="history-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--md history-shell">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_history.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">MEMORY LOG</span>
+                    <h2 class="otome-panel__title">历史对话</h2>
+                </div>
+                <button id="history-close" class="otome-panel__close" aria-label="关闭历史">
+                    <img src="src/_ui/icon_close.svg" alt="">
+                </button>
+            </div>
+            <div class="history-toolbar">
                 <div class="history-tabs">
                     <button class="history-tab active" data-tab="daily">日常对话</button>
                     <button class="history-tab" data-tab="date">约会行程</button>
@@ -237,158 +273,136 @@
                     <div class="select-selected">全部日期</div>
                     <div class="select-options hidden"></div>
                 </div>
-                <button id="history-close">关闭</button>
             </div>
-            <div id="history-list"></div>
-            <div id="date-history-list" class="hidden"></div>
+            <div class="otome-panel__body otome-panel__body--flush history-body">
+                <div id="history-list"></div>
+                <div id="date-history-list" class="hidden"></div>
+            </div>
         </div>
     </div>
 
-    <div id="date-panel" class="hidden">
-        <div class="date-inner">
-            <div class="date-header">
-                <h3>今日约会行程</h3>
-                <button id="date-close">关闭</button>
+    <div id="date-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--md date-shell">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_date.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">TODAY'S DATE</span>
+                    <h2 class="otome-panel__title">今日约会行程</h2>
+                </div>
+                <button id="date-close" class="otome-panel__close" aria-label="关闭约会">
+                    <img src="src/_ui/icon_close.svg" alt="">
+                </button>
             </div>
-            <div class="date-body">
+            <div class="otome-panel__body otome-panel__body--flush date-body">
                 <div id="date-locations"></div>
                 <div id="date-chat" class="hidden">
                     <div class="date-chat-header">
-                        <button id="date-back-btn">← 返回</button>
+                        <button id="date-back-btn" class="btn btn--ghost">← 返回</button>
                         <span id="date-chat-title"></span>
-                        <button id="date-new-topic-btn">换个话题</button>
+                        <button id="date-new-topic-btn" class="btn btn--ghost">换个话题</button>
                     </div>
                     <div id="date-chat-area"></div>
                     <div class="date-chat-input">
                         <input type="text" id="date-input" placeholder="说点什么..." autocomplete="off">
-                        <button id="date-send-btn">发送</button>
+                        <button id="date-send-btn" class="btn btn--primary">发送</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="gift-terminal-panel" class="hidden">
-        <div class="gift-terminal-inner">
-            <div class="gift-terminal-sidebar">
-                <div class="terminal-brand">
-                    <div class="terminal-logo">📥</div>
-                    <div>
-                        <h3>购物终端</h3>
-                        <span>泰古通达物流速递</span>
-                    </div>
+    <div id="gift-terminal-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--lg gift-shell">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_terminal.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">GIFT BOUTIQUE</span>
+                    <h2 class="otome-panel__title">购物终端</h2>
+                    <p class="otome-panel__sub">描述心意，为芙提雅定制专属礼物 · 世界树万能商品供应终端</p>
                 </div>
-                <button class="gift-terminal-tab active" id="gift-gift-category">
-                    <span class="terminal-tab-icon">🎁</span>
-                    <span>礼物</span>
-                </button>
-                <div class="terminal-sidebar-note">世界树公司-万能商品供应终端</div>
-            </div>
-            <div class="gift-terminal-main">
-                <div class="gift-terminal-header">
-                    <div>
-                        <h3>🛍️ 礼物定制与购买</h3>
-                        <span>自由生成送给恋人的礼物！我们会根据您的描述，进行礼物定制与估价。</span>
-                    </div>
-                    <div class="gift-terminal-header-actions">
-                        <span id="gift-balance">余额：🪙 40,000</span>
-                        <button id="gift-terminal-close">关闭</button>
-                    </div>
-                </div>
-                <div class="gift-terminal-body">
-                    <div class="gift-compose-card">
-                        <div class="gift-section-label">礼物描述</div>
-                        <textarea id="gift-description" maxlength="300" placeholder="例如：一只会发光的蓝色小熊挂件，里面藏着分析员写给芙提雅的短笺。"></textarea>
-                        <div class="gift-terminal-actions">
-                            <button id="gift-evaluate-btn">开始定制</button>
-                            <div id="gift-status"></div>
-                        </div>
-                    </div>
-                    <div id="gift-pending" class="gift-pending hidden">
-                        <div>
-                            <div class="gift-section-label">付款确认</div>
-                            <p>尊敬的分析员：您的礼物已定制完成。付款后将赠送给芙提雅女士。</p>
-                        </div>
-                        <button id="gift-pay-btn">支付</button>
-                    </div>
-                    <div id="gift-result" class="gift-result hidden"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="gift-collection-panel" class="hidden">
-        <div class="gift-collection-inner">
-            <div class="gift-collection-header">
-                <h3>🗄️ 礼物收藏柜</h3>
-                <button id="gift-collection-close">关闭</button>
-            </div>
-            <div id="gift-collection-list"></div>
-        </div>
-    </div>
-
-    <div id="dream-terminal-panel" class="hidden">
-        <div class="dream-shell">
-            <div class="dream-titlebar">
-                <div class="dream-titlemark">
-                    <img src="src/_logos/dream_terminal.svg" alt="">
-                </div>
-                <div class="dream-titlecopy">
-                    <span>DREAM FABRICATOR</span>
-                    <h2>造梦-家具打造终端</h2>
-                    <p>使用泰坦物质，任意创造可移动、可交互的家具实体。打造你和小老师的温馨小窝吧 ~</p>
-                </div>
-                <div class="dream-title-actions">
-                    <div class="dream-balance-card" id="dream-balance">
-                        <img src="src/_logos/dream_coin.svg" alt="">
-                        <span>余额：500 数据金</span>
-                    </div>
-                    <button id="dream-terminal-close" aria-label="关闭造梦终端">
-                        <img src="src/_logos/dream_close.svg" alt="">
+                <div class="otome-panel__actions">
+                    <span id="gift-balance" class="otome-chip">余额：🪙 40,000</span>
+                    <button id="gift-terminal-close" class="otome-panel__close" aria-label="关闭购物终端">
+                        <img src="src/_ui/icon_close.svg" alt="">
                     </button>
                 </div>
             </div>
-            <div class="dream-main">
-                <div class="dream-body">
-                    <section class="dream-wish-console">
-                        <div class="dream-panel-head">
-                            <img src="src/_logos/dream_blueprint.svg" alt="">
-                            <div>
-                                <span>WISH INPUT</span>
-                                <h3>家具愿望</h3>
-                            </div>
-                        </div>
-                        <label for="dream-furniture-description"> </label>
+            <div class="otome-panel__body">
+                <div class="otome-card gift-compose-card">
+                    <div class="otome-section-label">礼物描述</div>
+                    <textarea id="gift-description" maxlength="300" placeholder="例如：一只会发光的蓝色小熊挂件，里面藏着分析员写给芙提雅的短笺。"></textarea>
+                    <div class="gift-terminal-actions">
+                        <button id="gift-evaluate-btn" class="btn btn--primary">开始定制</button>
+                        <div id="gift-status"></div>
+                    </div>
+                </div>
+                <div id="gift-pending" class="gift-pending hidden">
+                    <div>
+                        <div class="otome-section-label">付款确认</div>
+                        <p>尊敬的分析员：您的礼物已定制完成。付款后将赠送给芙提雅女士。</p>
+                    </div>
+                    <button id="gift-pay-btn" class="btn btn--gold">支付</button>
+                </div>
+                <div id="gift-result" class="gift-result hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="gift-collection-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--md gift-collection-shell">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_gift.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">COLLECTION</span>
+                    <h2 class="otome-panel__title">礼物收藏柜</h2>
+                </div>
+                <button id="gift-collection-close" class="otome-panel__close" aria-label="关闭礼物收藏">
+                    <img src="src/_ui/icon_close.svg" alt="">
+                </button>
+            </div>
+            <div class="otome-panel__body">
+                <div id="gift-collection-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dream-terminal-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--lg dream-shell">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_dream.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">DREAM FABRICATOR</span>
+                    <h2 class="otome-panel__title">造梦 · 家具打造终端</h2>
+                    <p class="otome-panel__sub">以泰坦物质创造可移动、可交互的家具实体，打造你和小老师的温馨小窝 ~</p>
+                </div>
+                <div class="otome-panel__actions">
+                    <span id="dream-balance" class="otome-chip"><span>余额：500 数据金</span></span>
+                    <button id="dream-terminal-close" class="otome-panel__close" aria-label="关闭造梦终端">
+                        <img src="src/_ui/icon_close.svg" alt="">
+                    </button>
+                </div>
+            </div>
+            <div class="otome-panel__body">
+                <div class="dream-grid">
+                    <section class="otome-card dream-wish-console">
+                        <div class="otome-section-label">家具愿望</div>
                         <textarea id="dream-furniture-description" maxlength="520" placeholder="例如：一张适合两个人靠坐的星光阅读沙发，带柔软靠背和淡紫色灯带。"></textarea>
                         <div class="dream-hint-strip">
-                            <img src="src/_logos/dream_ai_core.svg" alt="">
-                            <span><b><font color="#F7F5CD">提示：</b>若 LLM 返回输出错误，请重试几次。</font><br /> ※ 家具形态为复杂几何体。构造家具所使用的泰坦物质，均经过彻底无害化处理。 </span>
+                            <span><b>提示：</b>若 LLM 返回输出错误，请重试几次。<br>※ 家具形态为复杂几何体。构造家具所使用的泰坦物质，均经过彻底无害化处理。</span>
                         </div>
                     </section>
-                    <aside class="dream-forge-console">
-                        <div class="dream-panel-head">
-                            <img src="src/_logos/dream_wand.svg" alt="">
-                            <div>
-                                <span>FABRICATION</span>
-                                <h3>打造参数</h3>
-                            </div>
-                        </div>
-                        <div class="dream-compose compact">
-                            <label for="dream-placement-input">摆放位置</label>
+                    <aside class="otome-card otome-card--rose dream-forge-console">
+                        <div class="otome-section-label">打造参数</div>
+                        <div class="dream-compose">
+                            <label class="otome-field-label" for="dream-placement-input">摆放位置</label>
                             <input id="dream-placement-input" type="text" maxlength="120" placeholder="例如：靠窗的右侧，不要挡住门">
                         </div>
                         <div class="dream-forge-card">
                             <div class="dream-forge-price">
-                                <img src="src/_logos/dream_coin.svg" alt="">
-                                <div>
-                                    <span>制造消耗</span>
-                                    <strong>500 数据金</strong>
-                                </div>
+                                <span>制造消耗</span>
+                                <strong>500 数据金</strong>
                             </div>
-                            <button id="dream-create-button">
-                                <img src="src/_logos/dream_furniture.svg" alt="">
-                                <span>制造家具</span>
-                            </button>
+                            <button id="dream-create-button" class="btn btn--primary">制造家具</button>
                         </div>
                         <div class="dream-progress-wrap">
                             <div class="dream-progress-track">
@@ -403,46 +417,30 @@
         </div>
     </div>
 
-    <div id="dream-furniture-editor-panel" class="hidden">
-        <div class="dream-editor-shell">
-            <div class="dream-editor-header">
-                <div class="dream-editor-titleline">
-                    <div class="dream-editor-mark">
-                        <img src="src/_logos/dream_blueprint.svg" alt="">
-                    </div>
-                    <div>
-                        <span>FURNITURE EDITOR</span>
-                        <h3 id="dream-editor-title">梦造家具</h3>
-                        <div id="dream-editor-meta"></div>
-                    </div>
+    <div id="dream-furniture-editor-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--md dream-editor-shell">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_dream.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">FURNITURE EDITOR</span>
+                    <h2 class="otome-panel__title" id="dream-editor-title">梦造家具</h2>
                 </div>
-                <button id="dream-editor-close" aria-label="关闭家具编辑">
-                    <img src="src/_logos/dream_close.svg" alt="">
+                <button id="dream-editor-close" class="otome-panel__close" aria-label="关闭家具编辑">
+                    <img src="src/_ui/icon_close.svg" alt="">
                 </button>
             </div>
-            <div class="dream-editor-body">
-                <section class="dream-editor-card name-card">
-                    <div class="dream-panel-head">
-                        <img src="src/_logos/dream_edit.svg" alt="">
-                        <div>
-                            <span>IDENTITY</span>
-                            <h3>家具档案</h3>
-                        </div>
-                    </div>
-                    <label for="dream-editor-name">家具名称</label>
+            <div class="otome-panel__body">
+                <div id="dream-editor-meta"></div>
+                <section class="otome-card name-card">
+                    <div class="otome-section-label">家具档案</div>
+                    <label class="otome-field-label" for="dream-editor-name">家具名称</label>
                     <div class="dream-inline-control">
                         <input id="dream-editor-name" type="text" maxlength="24">
-                        <button id="dream-editor-save-name">保存</button>
+                        <button id="dream-editor-save-name" class="btn btn--ghost">保存</button>
                     </div>
                 </section>
-                <section class="dream-editor-card style-card">
-                    <div class="dream-panel-head">
-                        <img src="src/_logos/dream_ai_core.svg" alt="">
-                        <div>
-                            <span>LLM RESTYLE</span>
-                            <h3>家具样式修改 <small>🪙 100</small></h3>
-                        </div>
-                    </div>
+                <section class="otome-card otome-card--rose style-card">
+                    <div class="otome-section-label">家具样式修改 <small class="dream-cost">🪙 100</small></div>
                     <div class="dream-style-meta">
                         <span id="dream-editor-style-balance">余额：--</span>
                         <small>若 LLM 返回输出错误，请重试几次。</small>
@@ -452,10 +450,7 @@
                         <div class="dream-style-progress" id="dream-editor-style-progress" aria-hidden="true">
                             <div id="dream-editor-style-progress-fill"></div>
                         </div>
-                        <button id="dream-editor-style-apply">
-                            <img src="src/_logos/dream_wand.svg" alt="">
-                            <span>样式变更</span>
-                        </button>
+                        <button id="dream-editor-style-apply" class="btn btn--gold"><span>样式变更</span></button>
                     </div>
                 </section>
                 <div id="dream-editor-status" aria-live="polite"></div>
@@ -463,35 +458,31 @@
         </div>
     </div>
 
-    <div id="dream-placement-editor-panel" class="hidden">
-        <div class="dream-placement-shell">
-            <div class="dream-editor-header">
-                <div class="dream-editor-titleline">
-                    <div class="dream-editor-mark">
-                        <img src="src/_logos/dream_gpt.svg" alt="">
-                    </div>
-                    <div>
-                        <span>POSITION REQUEST</span>
-                        <h3>家具位置调整</h3>
-                        <div class="dream-placement-subtitle">用自然语言描述新的摆放位置，系统会重新寻找安全位置。</div>
-                    </div>
+    <div id="dream-placement-editor-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--md dream-placement-shell">
+            <div class="otome-panel__head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_dream.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">POSITION REQUEST</span>
+                    <h2 class="otome-panel__title">家具位置调整</h2>
+                    <p class="otome-panel__sub">用自然语言描述新的摆放位置，系统会重新寻找安全位置。</p>
                 </div>
-                <button id="dream-placement-editor-close" aria-label="关闭位置调整">
-                    <img src="src/_logos/dream_close.svg" alt="">
+                <button id="dream-placement-editor-close" class="otome-panel__close" aria-label="关闭位置调整">
+                    <img src="src/_ui/icon_close.svg" alt="">
                 </button>
             </div>
-            <div class="dream-editor-body">
-                <section class="dream-editor-card">
-                    <label for="dream-editor-placement">新的摆放位置</label>
+            <div class="otome-panel__body">
+                <section class="otome-card">
+                    <label class="otome-field-label" for="dream-editor-placement">新的摆放位置</label>
                     <div class="dream-inline-control">
                         <input id="dream-editor-placement" type="text" maxlength="120" placeholder="例如：靠窗右侧，不要挡住门">
-                        <button id="dream-editor-auto-place">自动摆放</button>
+                        <button id="dream-editor-auto-place" class="btn btn--primary">自动摆放</button>
                     </div>
                 </section>
             </div>
         </div>
     </div>
 
-    <script type="module" src="js/main.js?v=20260618-dream-system"></script>
+    <script type="module" src="js/main.js?v=20260619-dream-system"></script>
 </body>
 </html>

@@ -1,0 +1,401 @@
+/* =============================================================
+   base.css — 基座层
+   - reset / body / canvas / HUD 容器 / 准星 / 加载屏 / 淡出层
+   - 「保持不变」三区域原样迁移：#game-status、#top-bar、#dream-object-controls
+     （这些规则从旧 style.css 原样搬运，确保视觉零变化）
+   字体全局不变。
+   ============================================================= */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden;
+    background: #000;
+    font-family: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+    color: #fff;
+    user-select: none;
+}
+
+#game-canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    touch-action: none;
+}
+
+.hidden {
+    display: none !important;
+}
+
+#fade-overlay {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 200;
+    transition: opacity 0.5s ease;
+}
+
+/* ===== Loading Screen (warmed to match Otome palette) ===== */
+#loading-screen {
+    position: fixed;
+    inset: 0;
+    background:
+        radial-gradient(circle at 30% 20%, rgba(244,184,200,0.28), transparent 45%),
+        radial-gradient(circle at 75% 80%, rgba(230,193,120,0.20), transparent 42%),
+        linear-gradient(150deg, #2a1822 0%, #3a2230 50%, #241019 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.8s ease;
+}
+
+#loading-screen.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.loading-content h2 {
+    font-size: 3.2rem;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(90deg, #f4b8c8, #e6c178, #f4b8c8);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 3s ease-in-out infinite;
+    display: inline-block;
+    position: relative;
+}
+
+.title-tag {
+    position: absolute;
+    top: -0.15em;
+    right: -5.4em;
+    font-size: 0.4em;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    background: linear-gradient(135deg, #e58aa6, #c75c80);
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    -webkit-text-fill-color: #fff;
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 3px;
+}
+
+@keyframes shimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.loading-sub {
+    color: rgba(255, 245, 248, 0.55);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+}
+
+.loading-bar {
+    width: 300px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 0 auto 1rem;
+}
+
+.loading-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #f4b8c8, #e6c178);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+#loading-text {
+    color: rgba(255, 245, 248, 0.42);
+    font-size: 0.8rem;
+}
+
+.loading-credit {
+    position: absolute;
+    bottom: 24px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: rgba(255, 245, 248, 0.32);
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+}
+
+/* ===== HUD container & crosshair ===== */
+#hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.6);
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+    display: none;
+}
+
+#crosshair.active {
+    display: block;
+}
+
+body.room-panorama-active #crosshair { display: none !important; }
+body.room-panorama-active #click-to-play { display: none !important; }
+body.room-panorama-active #touch-controls { display: none !important; }
+body.room-panorama-active #top-bar { display: none !important; }
+
+/* =============================================================
+   ↓↓↓ 保持不变区域（原样迁移，请勿改动视觉）↓↓↓
+   ============================================================= */
+
+/* ----- 左上角游戏状态 #game-status ----- */
+#game-status {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    min-width: 150px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    backdrop-filter: blur(8px);
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    overflow: visible;
+}
+
+#game-time-display {
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+}
+
+#money-display {
+    position: relative;
+    display: flex;
+    width: fit-content;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 0.82rem;
+    color: rgba(210, 235, 255, 0.86);
+}
+
+#affinity-display {
+    position: relative;
+    display: flex;
+    width: fit-content;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 0.82rem;
+    color: rgba(255, 205, 220, 0.94);
+}
+
+.affinity-pop {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 0;
+    color: #ff5f8f;
+    font-weight: 700;
+    white-space: nowrap;
+    text-shadow: 0 0 8px rgba(255, 95, 143, 0.55);
+    pointer-events: none;
+    animation: affinity-pop 1.15s ease-out forwards;
+}
+
+.money-pop {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 0;
+    color: #ffd66b;
+    font-weight: 700;
+    white-space: nowrap;
+    text-shadow: 0 0 8px rgba(255, 214, 107, 0.5);
+    pointer-events: none;
+    animation: affinity-pop 1.15s ease-out forwards;
+}
+
+@keyframes affinity-pop {
+    0% { opacity: 0; transform: translateY(5px) scale(0.88); }
+    18% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-18px) scale(1.08); }
+}
+
+#salary-toast {
+    margin-top: 6px;
+    color: #ffd66b;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    animation: salary-pop 2.8s ease forwards;
+}
+
+@keyframes salary-pop {
+    0% { opacity: 0; transform: translateY(-4px); }
+    12% { opacity: 1; transform: translateY(0); }
+    78% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-4px); }
+}
+
+/* ----- 右上角圆形按钮组 #top-bar ----- */
+#top-bar {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 60;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+#top-bar button,
+#settings-toggle {
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    transition: all 0.2s;
+}
+
+#top-bar button:hover,
+#settings-toggle:hover {
+    color: #fff;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+#top-bar button img {
+    width: 23px;
+    height: 23px;
+    display: block;
+    opacity: 0.6;
+    filter: brightness(0) invert(1);
+}
+
+#top-bar button:hover img {
+    opacity: 1;
+}
+
+/* ----- 家具编辑圆形浮层 #dream-object-controls ----- */
+#dream-object-controls {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    pointer-events: auto;
+    opacity: 1;
+    transition: opacity 0.18s ease;
+    cursor: grab;
+}
+
+#dream-object-controls[data-offscreen="1"] {
+    opacity: 0.22;
+}
+
+.dream-object-btn {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50%;
+    background: rgba(248, 250, 252, 0.42);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    pointer-events: auto;
+    cursor: pointer;
+    transform: translate(calc(var(--dream-controls-x, 50vw) - 50%), calc(var(--dream-controls-y, 50vh) - 50%));
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dream-object-btn:hover,
+.dream-object-btn:active {
+    background: rgba(248, 250, 252, 0.64);
+    transform: translate(calc(var(--dream-controls-x, 50vw) - 50%), calc(var(--dream-controls-y, 50vh) - 50%)) scale(1.04);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32), 0 0 0 4px rgba(125, 211, 252, 0.14);
+}
+
+.dream-object-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.28;
+    filter: grayscale(0.8);
+    transform: translate(calc(var(--dream-controls-x, 50vw) - 50%), calc(var(--dream-controls-y, 50vh) - 50%));
+}
+
+.dream-object-btn:disabled:hover,
+.dream-object-btn:disabled:active {
+    background: rgba(248, 250, 252, 0.42);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    transform: translate(calc(var(--dream-controls-x, 50vw) - 50%), calc(var(--dream-controls-y, 50vh) - 50%));
+}
+
+.dream-object-btn img {
+    width: 23px;
+    height: 23px;
+    display: block;
+}
+
+.dream-object-btn.confirm {
+    background: rgba(22, 163, 74, 0.72);
+    border-color: rgba(187, 247, 208, 0.45);
+}
+
+.dream-object-btn.confirm:hover,
+.dream-object-btn.confirm:active {
+    background: rgba(34, 197, 94, 0.86);
+    box-shadow: 0 12px 30px rgba(20, 83, 45, 0.42), 0 0 0 4px rgba(74, 222, 128, 0.16);
+}
+
+.dream-object-btn.delete {
+    background: rgba(220, 38, 38, 0.58);
+    border-color: rgba(254, 202, 202, 0.38);
+}
+
+.dream-object-btn.delete:hover,
+.dream-object-btn.delete:active {
+    background: rgba(239, 68, 68, 0.78);
+    box-shadow: 0 12px 30px rgba(127, 29, 29, 0.42), 0 0 0 4px rgba(248, 113, 113, 0.16);
+}
+
+.dream-object-btn.move-up { left: 0; top: -50px; }
+.dream-object-btn.move-left { left: -50px; top: 0; }
+.dream-object-btn.move-right { left: 50px; top: 0; }
+.dream-object-btn.move-down { left: 0; top: 50px; }
+.dream-object-btn.rotate-left { left: -104px; top: 0; }
+.dream-object-btn.rotate-right { left: 104px; top: 0; }
+.dream-object-btn.reset { left: -104px; top: 50px; }
+.dream-object-btn.delete { left: 184px; top: 50px; }
+.dream-object-btn.placement { left: 184px; top: 0; }
+.dream-object-btn.edit { left: 184px; top: -50px; }
+.dream-object-btn.confirm { left: 0; top: 0; }
