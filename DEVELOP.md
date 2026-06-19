@@ -1025,3 +1025,12 @@ Escape：
   - 在普通操作模式下看向 `painting` 类造梦家具时，提示会显示 `1 替换图片`，按 `1` 可直接替换图片。
   - `#dream-painting-prompt` 是独立的 `1 替换图片` 提示按钮；当同时出现 `F`、`E`、`1` 时，三者按 F/E/1 自上而下排列，移动端可分别点击。
   - 当焦点位于 `input`、`textarea`、`select` 或可编辑元素中时，不会触发该快捷键，避免输入文字时误打开文件选择。
+
+- `room.js`
+  - 造梦终端在墙面上的位置由 `dreamTerminalGroup.position.set(x, y, z)` 控制；当前为 `(5.25, 1.5, 2.955)`。
+  - 终端交互点需要同步修改 `dreamTerminalMesh.userData.interactionCenter`。
+  - 芙提雅在造梦终端附近的巡逻点为 `dream_terminal` waypoint。
+
+- `character.js`
+  - 旧房间床坐下深度由 `STATIC_BED_SIT_EDGE_INSET` 控制；数值越大，角色坐得越往床里面；数值越小，越靠外。
+  - 造梦床平躺的进入深度由 `DREAM_BED_LIE_EDGE_INSET` 控制，和旧房间床坐姿分开。

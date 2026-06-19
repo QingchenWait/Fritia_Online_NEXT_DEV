@@ -1055,6 +1055,8 @@ function isPostStandCooldownActive(cd) {
 const SIT_DROP = 0.35;
 const BED_SIT_RAISE = 0.08;
 const SIT_APPROACH_GAP = 0.15;
+const STATIC_BED_SIT_EDGE_INSET = 0.25;
+const DREAM_BED_LIE_EDGE_INSET = 0.45;
 const DREAM_BED_LIE_Y_OFFSET = -0.42;
 
 function isSeatWaypoint(waypoint) {
@@ -1169,7 +1171,9 @@ function getFurnitureSitPose(cd, waypoint) {
     const best = pickFurnitureInteractionEdge(box, waypoint, pos);
     if (!best) return null;
     const edgePoint = getFurnitureEdgePoint(box, best, waypoint);
-    const edgeInset = isSeatWaypoint(waypoint) ? 0.3 : 0.45;
+    const edgeInset = isSeatWaypoint(waypoint)
+        ? 0.3
+        : (shouldUseDreamBedPose(waypoint) ? DREAM_BED_LIE_EDGE_INSET : STATIC_BED_SIT_EDGE_INSET);
     const isDreamBed = shouldUseDreamBedPose(waypoint);
     const outside = SIT_APPROACH_GAP;
     const sitX = edgePoint.x - best.normalX * edgeInset;

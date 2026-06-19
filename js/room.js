@@ -466,11 +466,11 @@ export function createRoom(scene) {
     );
     dreamTerminalGlow.position.set(0.058, -0.35, 0);
     dreamTerminalGroup.add(dreamTerminalGlow);
-    dreamTerminalGroup.position.set(4.45, 1.5, 2.955);
+    dreamTerminalGroup.position.set(5.25, 1.5, 2.955);
     dreamTerminalGroup.rotation.y = Math.PI / 2;
     dreamGroup.add(dreamTerminalGroup);
     const dreamTerminalMesh = dreamTerminalBody;
-    dreamTerminalMesh.userData.interactionCenter = new THREE.Vector3(4.45, 1.58, 2.955);
+    dreamTerminalMesh.userData.interactionCenter = new THREE.Vector3(5.25, 1.58, 2.955);
 
     group.add(dreamGroup);
 
@@ -692,7 +692,7 @@ export function createRoom(scene) {
         { name: 'dream_center', roomId: 'dream', position: new THREE.Vector3(8, 0, 0), isFurniture: false },
         { name: 'dream_window', roomId: 'dream', position: new THREE.Vector3(8.2, 0, -1.95), isFurniture: false },
         { name: 'dream_far_wall', roomId: 'dream', position: new THREE.Vector3(11.3, 0, 1.85), isFurniture: false },
-        { name: 'dream_terminal', roomId: 'dream', position: new THREE.Vector3(4.25, 0, -1.15), isFurniture: false }
+        { name: 'dream_terminal', roomId: 'dream', position: new THREE.Vector3(5.25, 0, 1.85), isFurniture: false }
     ];
 
     const dreamRoomColliders = [];
