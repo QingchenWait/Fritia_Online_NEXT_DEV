@@ -188,6 +188,9 @@ export function initAchievements() {
     els.close = document.getElementById('achievements-close');
     els.toastHost = document.getElementById('achievement-toast-host');
     els.button = document.getElementById('btn-achievements');
+    if (els.toastHost && els.toastHost.parentElement !== document.body) {
+        document.body.appendChild(els.toastHost);
+    }
 
     els.button?.addEventListener('click', openAchievementsPanel);
     els.close?.addEventListener('click', closeAchievementsPanel);

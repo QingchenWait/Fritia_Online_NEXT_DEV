@@ -2531,7 +2531,9 @@ body.dream-revision-pending .touch-actions {
     left: 50%;
     top: 50%;
     z-index: 122;
+    width: min(360px, calc(100vw - 32px));
     max-width: min(360px, calc(100vw - 32px));
+    box-sizing: border-box;
     padding: 10px 14px;
     border: 1px solid rgba(138, 247, 255, 0.26);
     border-radius: 8px;
@@ -2558,6 +2560,10 @@ body.dream-revision-pending .touch-actions {
     border-right: 1px solid rgba(138, 247, 255, 0.22);
     border-bottom: 1px solid rgba(138, 247, 255, 0.22);
     background: rgba(14, 18, 28, 0.88);
+}
+
+.dream-character-bubble[data-edge="1"]::after {
+    display: none;
 }
 
 .dream-character-bubble.show {

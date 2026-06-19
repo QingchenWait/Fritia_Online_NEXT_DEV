@@ -394,7 +394,7 @@ localStorage key：`fritia_achievements`
 
 行为：
 
-- 成就卡片显示在最顶层，覆盖普通 overlay；`#achievement-toast-host` 使用极高 `z-index` 和独立 stacking context，避免被 overlay 的高斯模糊背景遮住。
+- 成就卡片显示在最顶层，覆盖普通 overlay；`#achievement-toast-host` 初始化时会从 `#hud` 提升到 `document.body` 直下，并使用极高 `z-index` 和独立 stacking context，避免被 overlay 的高斯模糊背景遮住。
 - 解锁时播放 `src/_voices/achievement_complete.mp3`。
 - 成就状态包含 `unlocked` 和 `notified`，导入时按时间戳合并。
 - “布置爱巢”位于“比翼双飞”后方，读取 `fritia_dream_furniture` 当前记录数，造梦空间内自制家具达到 `5` 件时解锁，图标 `src/_logos/ach_dream_love_nest.svg`。
@@ -564,7 +564,7 @@ localStorage key：`fritia_achievements`
 - `handleStyleRevision()`：样式修改流程。LLM 返回新 spec 后，本地校验、预览部署、扣费、进入确认/回退状态。
 - `handleFurnitureVisited(event)`：芙提雅到达动态家具 waypoint 后，按冷却和概率触发家具台词；显示气泡前会先让角色平滑转身面向对应家具。
 - `waitForCharacterFacingFurniture(record, duration)`：取家具 runtime collider/group 中心点，缓动角色 yaw 到面向家具的方向。
-- `showCharacterSpeechBubble(line)`：在芙提雅头顶显示面向屏幕的气泡。
+- `showCharacterSpeechBubble(line)`：显示固定宽度的家具台词气泡；芙提雅在视野内时贴在头顶，离开视野时停留在离屏方向的屏幕边缘。
 - `getFallbackFurnitureLine()`：LLM 失败或跳过时选择本地兜底台词。
 
 制造家具阶段：
@@ -617,7 +617,7 @@ localStorage key：`fritia_achievements`
 - 事件来源：`character.js` 到达动态家具 waypoint 后派发 `fritia-dream-furniture-visited`。
 - 同一家具冷却：`20 * 1000` ms 现实时间。
 - LLM 调用概率：当前为 `0.5`，未调用或失败时使用本地兜底台词。
-- 如果芙提雅头顶位置不在玩家当前视野内，则当次不显示气泡，也不发起台词展示。
+- 台词气泡使用固定宽度，并会把完整气泡限制在可视区域内；芙提雅离开画面时气泡保留在离屏边缘，回到画面后立即恢复为头顶悬浮。
 - 台词气泡出现前，芙提雅会先在约 `0.46s` 内平滑转身，让身体正面面向对应家具。
 - 日常对话、约会、礼物、造梦 overlay、睡眠、非操作模式中不会触发家具台词。
 

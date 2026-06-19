@@ -97,6 +97,7 @@ let lookDragPointerId = null;
 let lastLookDrag = { x: 0, y: 0 };
 const projectedControlPosition = new THREE.Vector3();
 const projectedBubblePosition = new THREE.Vector3();
+const projectedBubbleNdc = new THREE.Vector3();
 const furnitureSpeechTarget = new THREE.Vector3();
 const characterBubbleBox = new THREE.Box3();
 const dreamYAxis = new THREE.Vector3(0, 1, 0);
@@ -2014,7 +2015,6 @@ async function handleFurnitureVisited(event) {
     if (!canShowFurnitureDialogue()) return;
     const now = Date.now();
     if (now - (Number(record.lastDialogueAt) || 0) < DIALOGUE_COOLDOWN_MS) return;
-    if (!isCharacterBubbleInCameraView()) return;
 
     let line = '';
     const shouldCallLlm = Math.random() < FURNITURE_DIALOGUE_LLM_RATE;
@@ -2083,12 +2083,34 @@ function updateCharacterBubblePosition() {
         els.characterBubble.classList.add('hidden');
         return;
     }
-    projectedBubblePosition.project(camera);
-    const x = THREE.MathUtils.clamp((projectedBubblePosition.x * 0.5 + 0.5) * window.innerWidth, 18, window.innerWidth - 18);
-    const y = THREE.MathUtils.clamp((-projectedBubblePosition.y * 0.5 + 0.5) * window.innerHeight, 28, window.innerHeight - 18);
+    projectedBubbleNdc.copy(projectedBubblePosition).project(camera);
+    const rect = els.characterBubble.getBoundingClientRect();
+    const bubbleWidth = rect.width || 360;
+    const bubbleHeight = rect.height || 80;
+    const margin = 14;
+    const bubbleLift = 18;
+    const halfWidth = bubbleWidth / 2;
+    const minX = margin + halfWidth;
+    const maxX = window.innerWidth - margin - halfWidth;
+    const inFront = projectedBubbleNdc.z > -1 && projectedBubbleNdc.z < 1;
+    const ndcX = inFront ? projectedBubbleNdc.x : -projectedBubbleNdc.x;
+    const ndcY = inFront ? projectedBubbleNdc.y : -projectedBubbleNdc.y;
+    const attached = inFront
+        && projectedBubbleNdc.x >= -0.96
+        && projectedBubbleNdc.x <= 0.96
+        && projectedBubbleNdc.y >= -0.96
+        && projectedBubbleNdc.y <= 0.96;
+    const arrowExtra = attached ? 8 : 0;
+    const minAnchorY = margin + bubbleHeight + bubbleLift;
+    const maxAnchorY = window.innerHeight - margin + bubbleLift - arrowExtra;
+    const rawX = (ndcX * 0.5 + 0.5) * window.innerWidth;
+    const rawAnchorY = (-ndcY * 0.5 + 0.5) * window.innerHeight;
+    const x = THREE.MathUtils.clamp(rawX, minX, Math.max(minX, maxX));
+    const y = THREE.MathUtils.clamp(rawAnchorY, minAnchorY, Math.max(minAnchorY, maxAnchorY));
     els.characterBubble.style.opacity = '';
     els.characterBubble.style.left = `${x}px`;
     els.characterBubble.style.top = `${y}px`;
+    els.characterBubble.dataset.edge = attached ? '' : '1';
 }
 
 function stopCharacterBubbleProjection() {
@@ -2099,7 +2121,6 @@ function stopCharacterBubbleProjection() {
 }
 
 function showCharacterSpeechBubble(line) {
-    if (!isCharacterBubbleInCameraView()) return;
     const bubble = ensureCharacterBubble();
     bubble.textContent = line;
     bubble.classList.remove('hidden', 'show');
