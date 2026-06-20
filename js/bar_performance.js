@@ -9,6 +9,7 @@ const _rayCenter = new THREE.Vector2(0, 0);
 const _exitHits = [];
 const _danceHits = [];
 const _inviteHits = [];
+const _bartendingHits = [];
 
 function colliderKey(ix, iz) {
     return `${ix},${iz}`;
@@ -104,19 +105,21 @@ export function createBarInteractionProbe(options = {}) {
     let lastExit = false;
     let lastDance = false;
     let lastInvite = false;
+    let lastBartending = false;
 
-    return function probeBarInteractions({ active, camera, raycaster, exitMesh, danceMesh, inviteMesh, force = false }) {
+    return function probeBarInteractions({ active, camera, raycaster, exitMesh, danceMesh, inviteMesh, bartendingMesh, force = false }) {
         if (!active || !camera || !raycaster) {
             lastExit = false;
             lastDance = false;
             lastInvite = false;
-            return { exit: false, dance: false, invite: false };
+            lastBartending = false;
+            return { exit: false, dance: false, invite: false, bartending: false };
         }
 
         const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
         const interval = Number.isFinite(options.intervalMs) ? options.intervalMs : BAR_INTERACTION_INTERVAL_MS;
         if (!force && now - lastTime < interval) {
-            return { exit: lastExit, dance: lastDance, invite: lastInvite };
+            return { exit: lastExit, dance: lastDance, invite: lastInvite, bartending: lastBartending };
         }
         lastTime = now;
 
@@ -141,10 +144,17 @@ export function createBarInteractionProbe(options = {}) {
             raycaster.intersectObject(inviteMesh, true, _inviteHits);
         }
 
+        _bartendingHits.length = 0;
+        if (bartendingMesh) {
+            raycaster.far = 60;
+            raycaster.intersectObject(bartendingMesh, true, _bartendingHits);
+        }
+
         raycaster.far = oldFar;
         lastExit = _exitHits.length > 0;
         lastDance = _danceHits.length > 0;
         lastInvite = _inviteHits.length > 0;
-        return { exit: lastExit, dance: lastDance, invite: lastInvite };
+        lastBartending = _bartendingHits.length > 0;
+        return { exit: lastExit, dance: lastDance, invite: lastInvite, bartending: lastBartending };
     };
 }

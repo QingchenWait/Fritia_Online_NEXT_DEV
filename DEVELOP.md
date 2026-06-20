@@ -52,6 +52,7 @@ fritia_online_v3/
 │   ├── room_panorama.js
 │   ├── dance_system.js
 │   ├── bar_guest_system.js
+│   ├── bartending_challenge.js
 │   ├── bar_performance.js
 │   ├── zip_store.js
 │   ├── game_state.js
@@ -71,6 +72,7 @@ fritia_online_v3/
     ├── _voices/
     │   ├── startup_1.wav
     │   ├── talk_1.mp3 ... talk_5.mp3
+    │   ├── Cherno_welcome_1.wav ... Cherno_welcome_2.wav
     │   ├── sleep_mode_1.mp3 ... sleep_mode_2.mp3
     │   ├── sleep_whisper_1.mp3 ... sleep_whisper_5.mp3
     │   └── achievement_complete.mp3
@@ -97,7 +99,7 @@ npm run dev
 
 职责：
 
-- 初始化场景、房间、角色、控制器、对话、礼物、成就、造梦系统。
+- 初始化场景、房间、角色、控制器、对话、礼物、成就、造梦系统和调酒挑战。
 - 管理主循环 `animate()`。
 - 统一处理 `E/F/Escape/1/2` 键位。
 - 更新 HUD、时间、昼夜窗户颜色、房间作用域。
@@ -120,11 +122,12 @@ npm run dev
 主要函数：
 
 - `init()`：主初始化流程。按顺序初始化 `game_state`、`scene`、`room`、`character`、`controls`、对话系统、礼物系统、成就系统和造梦系统。
-- `onKeyDown(e)`：全局键盘交互。`E` 处理门、终端、家具、礼物、床、约会、挂画、衣柜；`F` 处理角色互动和摸头；`1/2` 处理造梦家具样式修改确认/回退；看向造梦终端时 `1` 进入房间全景拍照模式；全景模式内 `E` / `Esc` / `1` 退出。
+- `onKeyDown(e)`：全局键盘交互。`E` 处理门、终端、家具、礼物、床、约会、挂画、衣柜、暖调闲聚舞台/邀请/调酒挑战；`F` 处理角色互动和摸头；`1/2` 处理造梦家具样式修改确认/回退；看向造梦终端时 `1` 进入房间全景拍照模式；全景模式内 `E` / `Esc` / `1` 退出。
 - `animate()`：主循环。更新游戏时间、控制器、角色、门动画、房间作用域、窗户天空色、交互提示并渲染场景。
 - 开局欢迎闸门：加载完成但玩家尚未点击 `#click-to-play` 前，角色只保留眨眼，不切换 waypoint、不随机移动；首次点击后先执行面向玩家镜头的挥手欢迎，挥手结束再恢复正常行动。
 - `updateInteractionPrompt()`：复用 `#painting-prompt` 和 `#interaction-prompt` 显示当前可用交互；造梦家具显示 `按 E 管理 [家具名]`。
 - 暖调闲聚舞台：看向 `BarDanceInvisiblePlane` 时显示 `按 E 观看跳舞`，打开 `#dance-panel`；舞蹈流程中 `updateDanceSystem(delta)` 接管 VMD 动作，暂停角色日常 AI，但玩家移动/视角仍由 `controls.js` 正常更新。
+- 暖调闲聚调酒：看向 `BarBartendingChallengeInvisibleBox` 时显示 `按 E 请琴诺帮忙调酒`，打开 `#bartending-challenge-panel` 并释放控制模式；Escape 或关闭按钮退出并派发 `fritia-overlay-closed`。
 - `hasClearLineOfSight(targetPoint, targetDistance)`：按 E 交互视线遮挡判断。玩家视角到目标点之间如果被当前碰撞体阻挡，则不显示也不触发按 E 管理/交互。睡眠模式的 `按 E 起床` 不走这个规则。
 - `isLookingAtTerminal()` / `isLookingAtDreamTerminal()` / `isLookingAtDreamDoor()` / `isLookingAtPainting()` 等：各类准星交互检测。
 - `toggleDreamDoor()`：切换造梦空间推拉门开关状态，并刷新玩家/角色碰撞作用域。
@@ -272,16 +275,57 @@ npm run dev
 - 舞蹈流程中玩家移动和视角不锁定；角色日常 AI、F 对话和酒吧返回宿舍会被暂停，返回宿舍提示置灰。
 - 关闭 `#dance-panel` 时派发 `fritia-overlay-closed`，并已加入 `controls.js` overlay 管理列表。
 
+## 暖调闲聚调酒挑战：`js/bartending_challenge.js`
+
+职责：
+
+- 管理 `#bartending-challenge-panel` 调酒挑战浮层；看向酒吧内 `BarBartendingChallengeInvisibleBox` 时显示 `按 E 请琴诺帮忙调酒`。
+- 入口体积位于 `X=6.8~8.3, Y=0.65~2.85, Z=40~45`，只用于准星 raycast，不加入玩家/角色 colliders，不阻挡移动。
+- 每局初始 HP 为 `100`，必须喝满 `8` 杯；跳过本杯会揭示本杯完整调制结果，但不扣血、不回血，也不计入已喝杯数。跳过黑暗料理时结果右上角显示绿色 `危险回避`，跳过良好饮品时显示黄色 `错失良机`。
+- 材料分为 `base/flavor/garnish` 三类，每类至少 6 个正常材料和 2 个古怪材料；玩家可使用预置卡片或自由输入，每类最终只取一个材料。
+- 材料只作为风味灵感，不应稳定决定好坏；`buildBartendingRequestBody()` 每次生成随机调配动作，并要求 LLM 让琴诺临场动作比材料组合更影响最终结果。Prompt 使用字段协议描述 JSON，不在示例中固定 `darkLevel` / `hpDelta` 数字，避免模型复读固定伤害。
+- 自定义材料输入在输入时即时预览到右侧组合槽，输入框 blur/change 时提交为本轮材料；点击预置材料会清空对应自定义输入和草稿。
+- `开始特调` 时只调用一次 OpenAI 兼容 `chat/completions`；饮用前只展示 `previewText` 外观/气味，饮用后才揭示 HP 变化、黑暗料理判定、酒名、调酒过程和标签。
+- LLM 调用复用 `settings.js#getSettings()` 的 `apiKey/baseUrl/model`，不新增后端和独立 API Key。
+- 支持 SSE 与非 SSE 响应；模型返回非 JSON 时会尝试提取首个 JSON 对象，仍失败则使用本地 fallback 生成可玩的随机结果。
+- 前端最终校验并钳制 `hpDelta`：良好饮品回血 `+8~+25`，HP ≥ 75 时单次最大回血 15；普通黑暗料理扣血 `-8~-28`，灾难级 `-40~-49` 低概率出现；HP ≤ 35 时单次最大扣血 25。
+- 若 `isDarkCuisine` 与 `hpDelta` 符号矛盾，前端按黑暗料理/良好饮品语义修正符号和区间。
+- 关闭面板会中断仍在进行的请求并丢弃本局状态；重新打开总是新局。
+
+LLM JSON 协议：
+
+```json
+{
+  "cocktailName": "悖谬草莓杯",
+  "previewText": "粉色气泡闪烁，闻着很甜",
+  "isDarkCuisine": true,
+  "darkLevel": "1 到 5 的整数",
+  "hpDelta": "整数，黑暗料理为负，良好饮品为正",
+  "processText": "约 100 字的琴诺调酒过程。",
+  "tags": ["琴诺特调", "黑暗料理"]
+}
+```
+
+运行约定：
+
+- 调酒挑战状态只保存在内存，不写入 `localStorage`，不进入导出/导入 JSON。
+- 没有 API Key 时提示玩家先去设置填写；API 请求失败、空输出、非 JSON、字段类型异常都不会卡死，按 fallback 继续。
+- 重复点击 `开始特调` 会被禁用，避免并发请求。
+- `#bartending-challenge-panel` 已加入 `controls.js` overlay 管理列表；关闭时派发 `fritia-overlay-closed`，恢复控制模式。
+- 窄屏/移动端下 `#bartending-challenge-panel` 自身允许纵向滚动，材料列表取消内部固定高度且保持每行 2 个材料；右侧组合槽在 980px 以下改为稳定网格布局，避免绝对定位挤压错乱；600px 以下可点击 `基酒/调味/装饰` 标题折叠对应材料栏。
+
 ## 暖调闲聚访客系统：`js/bar_guest_system.js`
 
 职责：
 
 - 管理 `#bar-guest-panel` 发起邀请浮层；看向 `BarInviteInvisibleBox` 时显示 `按 E 邀请其他人入场`。
 - 内置候选角色 `芬妮`：PMX 位于 `src/_char_card/fenny/芬妮-澄意 夕晖蜜约.pmx`，人格设定位于 `src/_char_card/fenny/char_fenny_prompt.txt`。
+- 特殊场景角色 `琴诺`：PMX 与贴图位于 `src/_char_card/Cherno/`，人格设定位于 `src/_char_card/Cherno/char_cherno_prompt.txt`；每次进入酒吧都会自动加载，固定在 `X=7.2, Y=0.668, Z=42.01`，不进入候选列表、不写入访客存档、不参与随机移动。
 - 自定义角色通过本地 PMX 文件、同目录贴图/材质资源和人格设定文档导入；PMX 上传后在浮层中显示临时预览，读取期间显示圆形加载动画。浏览器无法仅凭单个本地文件授权枚举其目录；实现会扫描 PMX 内贴图文件名，并从用户同次选择的文件中自动匹配需要的贴图资源。
 - 新角色运行时通过 `character.js#loadCharacterFromModel()` 复用芙提雅的缩放、行走、寻路和姿态逻辑，但角色数据、人格 prompt、对话配色和生命周期独立。
 - 访客重新进入酒吧时会在地图中部 `BAR_GUEST_SPAWN_AREA` 内随机出生；初始 Y 轴由出生点脚下 walkable 碰撞盒高度动态计算，不使用固定 Y 偏移，也不改动角色移动时的 Y 轴逻辑。
 - 访客只在 `currentPlayerRoomId === "bar"` 时加载、更新和互动；离开酒吧时卸载运行时资源。未保存的临时访客不会再次加载，已保存的访客下次进入酒吧自动加载。
+- 琴诺接近玩家时会在固定点转身并让头部看向玩家镜头；玩家离开判定范围后，身体会平滑转回初始朝向；对话使用独立紫色主题。玩家按 `F` 与琴诺开始对话时，会在 `src/_voices/Cherno_welcome_1.wav` 与 `src/_voices/Cherno_welcome_2.wav` 中随机播放一段欢迎语，该语音仅限琴诺角色。
 - 访客对话使用设置面板中的 OpenAI 兼容 `chat/completions` 配置，不新增后端和独立 API Key。
 
 存储：
@@ -923,6 +967,45 @@ DOM ID：
 - `#bar-guest-save`
 - `#bar-guest-invite`
 
+暖调闲聚调酒挑战：
+
+- `#bartending-challenge-panel`
+- `#bartending-close`
+- `#bartending-hp-value`
+- `#bartending-hp-state`
+- `#bartending-hp-bar`
+- `#bartending-round-value`
+- `#bartending-drink-count`
+- `#bartending-base-list`
+- `#bartending-flavor-list`
+- `#bartending-garnish-list`
+- `#bartending-base-custom`
+- `#bartending-flavor-custom`
+- `#bartending-garnish-custom`
+- `#bartending-note`
+- `#bartending-slot-base`
+- `#bartending-slot-flavor`
+- `#bartending-slot-garnish`
+- `#bartending-loading`
+- `#bartending-preview-panel`
+- `#bartending-preview-text`
+- `#bartending-preview-hint`
+- `#bartending-drink-btn`
+- `#bartending-skip-btn`
+- `#bartending-reveal-panel`
+- `#bartending-result-kind`
+- `#bartending-result-name`
+- `#bartending-result-delta`
+- `#bartending-result-process`
+- `#bartending-result-tags`
+- `#bartending-next-btn`
+- `#bartending-end-panel`
+- `#bartending-end-title`
+- `#bartending-end-text`
+- `#bartending-restart-btn`
+- `#bartending-status`
+- `#bartending-start-btn`
+
 家具位置 overlay：
 
 - `#dream-placement-editor-panel`
@@ -984,6 +1067,8 @@ DOM ID：
 - `fritia_painting`：挂画图片 data URL。
 - `fritia_dream_furniture`：造梦家具记录数组。
 
+调酒挑战不新增 `localStorage` key；每局状态只存在于 `js/bartending_challenge.js` 内存中，关闭浮层后丢弃。
+
 造梦家具记录：
 
 ```json
@@ -1016,6 +1101,7 @@ DOM ID：
   - 来源：各 overlay 关闭。
   - detail：`{ id }`。
   - 用途：恢复控制模式和清理互动状态。
+  - 调酒挑战关闭时 detail 为 `{ id: "bartending-challenge-panel" }`。
 - `fritia-game-state-updated`
   - 来源：数据金变化、统计变化、礼物变化。
   - detail 可包含 `{ moneyDelta, reason }`。
@@ -1056,6 +1142,7 @@ DOM ID：
 - `dreamFurniture` 按 `id` 去重合并，坏 spec 或不安全摆放会跳过，不中断整体导入。
 - `achievements` 合并 timestamp。
 - `settings` 和 `painting` 若存在则导入。
+- 调酒挑战无持久化字段，不参与导出/导入。
 
 ## UI 和样式约定：模块化 CSS（暖色少女 Otome）
 
@@ -1085,6 +1172,7 @@ DOM ID：
 - `src/_logos/achievement_*.svg`, `src/_logos/ach_*.svg`：成就系统图标。
 - `src/_voices/achievement_complete.mp3`：成就解锁音效。
 - `src/_voices/talk_*.mp3`：日常互动语音。
+- `src/_voices/Cherno_welcome_*.wav`：琴诺专用 F 对话欢迎语，进入琴诺对话时随机播放。
 - `src/_voices/sleep_*`：睡眠模式音频。
 
 ## 交互规则
@@ -1155,9 +1243,18 @@ Escape：
 10. VMD 结束后显示绿色 `1 再来一次` 和粉色 `2 喝彩谢幕`；按 1 或点左侧按钮重播，按 2、点右侧按钮或等待 5 秒后结束舞蹈流程，移除舞台 Y 偏移并恢复角色自由行动。
 11. 酒吧内看向 `X=-1.0~1.0, Y=0.67~1.07, Z=46.5~49.1` 邀请体，提示 `按 E 邀请其他人入场`，按 E 打开 `#bar-guest-panel`。
 12. 在邀请面板中可直接选择内置芬妮入场；首次邀请芬妮后会写入内置访客保留状态，退出并重新进入酒吧、刷新页面或导入导出存档后仍会自动加载；导入 PMX 和人格文档后可临时邀请，保存后加入候选列表，删除按钮可删除自定义角色但不能删除芬妮。
-13. 访客只在酒吧内移动和对话；离开酒吧后临时访客卸载，已保存访客和已保留的内置访客下次进入酒吧自动加载。
-14. 酒吧内芙提雅对话和访客对话都显示在历史面板的“暖调闲聚”页；芙提雅在卧室/造梦空间的对话仍显示在“日常对话”页。
-15. 导出生成 `.zip`，包含 `save.json` 与自定义访客资源；导入 ZIP 后可恢复自定义访客并在酒吧重新加载。
+13. 每次进入酒吧时，琴诺应自动出现在 `X=7.2, Y=0.668, Z=42.01`，不会移动；玩家接近时身体和头部看向玩家镜头，离开判定范围后身体平滑转回初始朝向，按 F 可互动，对话框和发送按钮为紫色主题，并随机播放一段 `Cherno_welcome_*.wav` 欢迎语。
+14. 酒吧内看向 `X=6.8~8.3, Y=0.65~2.85, Z=40~45` 调酒挑战体，提示 `按 E 请琴诺帮忙调酒`，按 E 打开 `#bartending-challenge-panel` 并释放控制模式。
+15. 调酒挑战未配置 API Key 时，点击 `开始特调` 显示设置提示，不跳转、不弹 alert、不进入卡死状态。
+16. 调酒挑战中选择预置材料或填写自定义材料后开始特调；LLM 返回前按钮禁用并显示加载动画。
+17. 调酒挑战 LLM 输出非法、空输出或 API 请求失败时，应使用本地 fallback 结果继续显示杯前观察。
+18. 饮用前只显示外观和气味；点击 `闭眼喝下` 后才揭示 HP 变化、是否黑暗料理、酒名、约 100 字过程和 tags。
+19. 点击 `这杯先放过我` 不改变 HP、不增加已饮用杯数，可无限跳过；本杯仍会揭示调制结果，黑暗料理显示 `危险回避`，正常饮品显示 `错失良机`，再点 `下一杯` 回到材料选择。
+20. HP ≤ 0 时显示失败文案；喝满 8 杯且 HP > 0 时显示成功文案；点击重新挑战重置为 HP 100。
+21. 调酒挑战进行中点击右上关闭或按 Escape，会关闭浮层、丢弃本局状态、恢复控制模式；请求仍在进行时应中断或忽略结果。
+22. 访客只在酒吧内移动和对话；离开酒吧后临时访客卸载，已保存访客和已保留的内置访客下次进入酒吧自动加载。
+23. 酒吧内芙提雅对话和访客对话都显示在历史面板的“暖调闲聚”页；芙提雅在卧室/造梦空间的对话仍显示在“日常对话”页。
+24. 导出生成 `.zip`，包含 `save.json` 与自定义访客资源；导入 ZIP 后可恢复自定义访客并在酒吧重新加载；调酒挑战不新增导出字段。
 
 旧功能回归：
 

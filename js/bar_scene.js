@@ -52,6 +52,12 @@ const BAR_INVITE_BOX_MIN_Y = 0.67;
 const BAR_INVITE_BOX_MAX_Y = 1.07;
 const BAR_INVITE_BOX_MIN_Z = 46.5;
 const BAR_INVITE_BOX_MAX_Z = 49.1;
+const BAR_BARTENDING_BOX_MIN_X = 6.8;
+const BAR_BARTENDING_BOX_MAX_X = 8.3;
+const BAR_BARTENDING_BOX_MIN_Y = 0.65;
+const BAR_BARTENDING_BOX_MAX_Y = 2.85;
+const BAR_BARTENDING_BOX_MIN_Z = 40.0;
+const BAR_BARTENDING_BOX_MAX_Z = 45.0;
 
 let barScenePromise = null;
 let barSceneData = null;
@@ -686,6 +692,30 @@ function createInviteMarker() {
     return { interactionMesh: mesh };
 }
 
+function createBartendingMarker() {
+    const geometry = new THREE.BoxGeometry(
+        BAR_BARTENDING_BOX_MAX_X - BAR_BARTENDING_BOX_MIN_X,
+        BAR_BARTENDING_BOX_MAX_Y - BAR_BARTENDING_BOX_MIN_Y,
+        BAR_BARTENDING_BOX_MAX_Z - BAR_BARTENDING_BOX_MIN_Z
+    );
+    const material = new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = 'BarBartendingChallengeInvisibleBox';
+    mesh.position.set(
+        (BAR_BARTENDING_BOX_MIN_X + BAR_BARTENDING_BOX_MAX_X) * 0.5,
+        (BAR_BARTENDING_BOX_MIN_Y + BAR_BARTENDING_BOX_MAX_Y) * 0.5,
+        (BAR_BARTENDING_BOX_MIN_Z + BAR_BARTENDING_BOX_MAX_Z) * 0.5
+    );
+    mesh.visible = false;
+    mesh.userData.interactionCenter = mesh.position.clone();
+    return { interactionMesh: mesh };
+}
+
 function createBarLights() {
     const group = new THREE.Group();
     group.name = 'BarSceneLights';
@@ -848,6 +878,8 @@ async function loadBarSceneInternal(scene) {
     group.add(dance.interactionMesh);
     const invite = createInviteMarker();
     group.add(invite.interactionMesh);
+    const bartending = createBartendingMarker();
+    group.add(bartending.interactionMesh);
 
     scene.add(group);
     hideResidualMmdToonObjects(scene);
@@ -878,6 +910,7 @@ async function loadBarSceneInternal(scene) {
         exitInteractionMesh: exit.interactionMesh,
         danceInteractionMesh: dance.interactionMesh,
         inviteInteractionMesh: invite.interactionMesh,
+        bartendingInteractionMesh: bartending.interactionMesh,
         spawn
     };
     return barSceneData;
@@ -939,6 +972,10 @@ export function getBarDanceInteractionMesh() {
 
 export function getBarInviteInteractionMesh() {
     return barSceneData?.inviteInteractionMesh || null;
+}
+
+export function getBarBartendingInteractionMesh() {
+    return barSceneData?.bartendingInteractionMesh || null;
 }
 
 export function getBarSpawn() {

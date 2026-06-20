@@ -178,6 +178,120 @@
         </div>
     </div>
 
+    <div id="bartending-challenge-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--xl bartending-shell">
+            <div class="otome-panel__head bartending-head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_gift.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">CHERNO MIXOLOGY</span>
+                    <h2 class="otome-panel__title">调酒挑战</h2>
+                    <p class="otome-panel__sub">琴诺的八杯生存特调。</p>
+                </div>
+                <div class="otome-panel__actions">
+                    <span class="otome-chip otome-chip--rose">8 杯挑战</span>
+                    <button id="bartending-close" class="otome-panel__close" aria-label="关闭调酒挑战">
+                        <img src="src/_ui/icon_close.svg" alt="">
+                    </button>
+                </div>
+            </div>
+            <div class="otome-panel__body otome-panel__body--flush bartending-body">
+                <div class="bartending-status-deck">
+                    <div class="bartending-hp-console">
+                        <div class="bartending-hp-meta">
+                            <span>HP <strong id="bartending-hp-value">100</strong></span>
+                            <em id="bartending-hp-state" data-level="high">稳定</em>
+                        </div>
+                        <div class="bartending-hp-track">
+                            <div id="bartending-hp-bar" data-level="high"></div>
+                        </div>
+                    </div>
+                    <div class="bartending-round-console">
+                        <span>ROUND</span>
+                        <strong id="bartending-round-value">1/8</strong>
+                        <small>已饮用 <b id="bartending-drink-count">0/8</b></small>
+                    </div>
+                </div>
+                <div class="bartending-grid">
+                    <section class="bartending-mixer-panel" aria-label="调酒材料选择">
+                        <div class="bartending-lane">
+                            <div class="otome-section-label">基酒</div>
+                            <div id="bartending-base-list" class="bartending-ingredient-list"></div>
+                            <input id="bartending-base-custom" type="text" maxlength="24" placeholder="自定义基酒">
+                        </div>
+                        <div class="bartending-lane">
+                            <div class="otome-section-label">调味</div>
+                            <div id="bartending-flavor-list" class="bartending-ingredient-list"></div>
+                            <input id="bartending-flavor-custom" type="text" maxlength="24" placeholder="自定义调味">
+                        </div>
+                        <div class="bartending-lane">
+                            <div class="otome-section-label">装饰</div>
+                            <div id="bartending-garnish-list" class="bartending-ingredient-list"></div>
+                            <input id="bartending-garnish-custom" type="text" maxlength="24" placeholder="自定义装饰">
+                        </div>
+                        <div class="bartending-note-field">
+                            <label class="otome-field-label" for="bartending-note">本杯要求</label>
+                            <textarea id="bartending-note" maxlength="180" placeholder="例如：看起来像无害甜酒，但最好让琴诺自由发挥。"></textarea>
+                        </div>
+                    </section>
+                    <aside class="bartending-result-panel" aria-live="polite">
+                        <div class="bartending-slot-board">
+                            <div class="bartending-slot slot-base">
+                                <span>基酒</span>
+                                <strong id="bartending-slot-base">金酒</strong>
+                            </div>
+                            <div class="bartending-slot slot-flavor">
+                                <span>调味</span>
+                                <strong id="bartending-slot-flavor">青柠汁</strong>
+                            </div>
+                            <div class="bartending-slot slot-garnish">
+                                <span>装饰</span>
+                                <strong id="bartending-slot-garnish">柠檬片</strong>
+                            </div>
+                            <div class="bartending-shaker" aria-hidden="true">
+                                <span></span>
+                            </div>
+                        </div>
+                        <div id="bartending-loading" class="bartending-loading hidden">
+                            <span></span>
+                            <p>琴诺正在摇杯...</p>
+                        </div>
+                        <div id="bartending-preview-panel" class="bartending-preview-panel hidden">
+                            <div class="otome-section-label">杯前观察</div>
+                            <p id="bartending-preview-text">琴诺正在摇杯，暂时看不清结果。</p>
+                            <small id="bartending-preview-hint">只显示外观和气味，真正效果要喝下才知道。</small>
+                            <div class="bartending-choice-row">
+                                <button id="bartending-drink-btn" class="btn btn--primary" type="button">闭眼喝下</button>
+                                <button id="bartending-skip-btn" class="btn btn--ghost" type="button">这杯先放过我</button>
+                            </div>
+                        </div>
+                        <div id="bartending-reveal-panel" class="bartending-reveal-panel hidden">
+                            <div class="bartending-reveal-head">
+                                <div>
+                                    <span id="bartending-result-kind" data-kind="dark">黑暗料理</span>
+                                    <h3 id="bartending-result-name">悖谬星雾杯</h3>
+                                </div>
+                                <strong id="bartending-result-delta" data-kind="damage">-18 HP</strong>
+                            </div>
+                            <p id="bartending-result-process"></p>
+                            <div id="bartending-result-tags" class="bartending-tags"></div>
+                            <button id="bartending-next-btn" class="btn btn--gold" type="button">下一杯</button>
+                        </div>
+                        <div id="bartending-end-panel" class="bartending-end-panel hidden" data-result="win">
+                            <span class="bartending-end-mark"></span>
+                            <h3 id="bartending-end-title">挑战成功</h3>
+                            <p id="bartending-end-text">分析员精神倍增，把所有天启者都带进了自己的房间。</p>
+                            <button id="bartending-restart-btn" class="btn btn--primary" type="button">重新挑战</button>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+            <div class="otome-panel__foot bartending-foot">
+                <div id="bartending-status" data-kind="info">选择三种材料后开始特调。</div>
+                <button id="bartending-start-btn" class="btn btn--primary" type="button">开始特调</button>
+            </div>
+        </div>
+    </div>
+
     <div id="touch-controls">
         <div class="touch-joystick" id="joystick-move">
             <div class="joystick-knob" id="joystick-move-knob"></div>

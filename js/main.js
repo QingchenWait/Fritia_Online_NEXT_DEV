@@ -45,6 +45,7 @@ import {
     BAR_ROOM_ID,
     ensureBarScene,
     getBarBounds,
+    getBarBartendingInteractionMesh,
     getBarCharacterColliders,
     getBarDanceInteractionMesh,
     getBarExitInteractionMesh,
@@ -90,6 +91,12 @@ import {
     unloadAllBarGuests,
     updateBarGuests
 } from './bar_guest_system.js';
+import {
+    closeBartendingChallenge,
+    initBartendingChallenge,
+    isBartendingChallengeVisible,
+    openBartendingChallenge
+} from './bartending_challenge.js';
 import { createZip, readZip, readZipText } from './zip_store.js';
 
 let scene, camera, renderer;
@@ -277,6 +284,7 @@ async function init() {
     initSettings();
     initGiftSystem();
     initAchievements();
+    initBartendingChallenge();
     initDreamSystem({
         scene,
         camera,
@@ -463,6 +471,8 @@ function onKeyDown(e) {
         if (isDreamOverlayVisible()) return;
         if (isDanceOverlayVisible()) return;
         if (isInvitePanelVisible()) return;
+        if (isBartendingChallengeVisible()) return;
+        if (isUtilityOverlayVisible()) return;
 
         if (isSleeping) {
             petFritiaHead();
@@ -496,10 +506,15 @@ function onKeyDown(e) {
         if (isDreamOverlayVisible()) return;
         if (isDanceOverlayVisible()) return;
         if (isInvitePanelVisible()) return;
+        if (isBartendingChallengeVisible()) return;
+        if (isUtilityOverlayVisible()) return;
         if (controlsModule && controlsModule.state.isLocked) {
             const barLook = isBarSceneActive ? getBarInteractionLookState(true) : null;
             if (isSleeping) {
                 exitSleepMode();
+            } else if (barLook?.bartending && !isDanceFlowActive()) {
+                openBartendingChallenge();
+                controlsModule.releaseControlMode({ resumeOnClose: true });
             } else if (barLook?.invite && !isDanceFlowActive()) {
                 openInvitePanel();
             } else if (barLook?.dance && !isDanceFlowActive()) {
@@ -558,6 +573,10 @@ function onKeyDown(e) {
             closeDancePanel();
             return;
         }
+        if (isBartendingChallengeVisible()) {
+            closeBartendingChallenge();
+            return;
+        }
         if (isInvitePanelVisible()) {
             closeInvitePanel();
             return;
@@ -574,6 +593,18 @@ function onKeyDown(e) {
             closeModelSelector();
         }
     }
+}
+
+function isPanelVisible(id) {
+    const el = document.getElementById(id);
+    return !!el && !el.classList.contains('hidden');
+}
+
+function isUtilityOverlayVisible() {
+    return isPanelVisible('settings-panel')
+        || isPanelVisible('history-panel')
+        || isPanelVisible('achievements-panel')
+        || isPanelVisible('model-selector');
 }
 
 function playTalkSound() {
@@ -1232,7 +1263,7 @@ function updateInteractionPrompt() {
         hideActionPrompts();
         return;
     }
-    if (isSleeping || isInteracting || isDialogueVisible() || isDatePanelVisible() || isGiftOverlayVisible() || isDreamOverlayVisible() || isDanceOverlayVisible()) {
+    if (isSleeping || isInteracting || isDialogueVisible() || isDatePanelVisible() || isGiftOverlayVisible() || isDreamOverlayVisible() || isDanceOverlayVisible() || isInvitePanelVisible() || isBartendingChallengeVisible() || isGuestInteracting() || isUtilityOverlayVisible()) {
         hideActionPrompts();
         return;
     }
@@ -1399,7 +1430,11 @@ function updateBarInteractionPromptV2(prompt, paintingPrompt, dreamPaintingPromp
     dreamPaintingPrompt?.classList.add('hidden');
     paintingPrompt.classList.remove('is-disabled');
     const look = getBarInteractionLookState();
-    if (look.invite && !isDanceFlowActive()) {
+    if (look.bartending && !isDanceFlowActive()) {
+        paintingPrompt.innerHTML = '按 <kbd>E</kbd> 请琴诺帮忙调酒';
+        paintingPrompt.dataset.promptKey = 'KeyE';
+        paintingPrompt.classList.remove('hidden');
+    } else if (look.invite && !isDanceFlowActive()) {
         paintingPrompt.innerHTML = '按 <kbd>E</kbd> 邀请其他人入场';
         paintingPrompt.dataset.promptKey = 'KeyE';
         paintingPrompt.classList.remove('hidden');
@@ -1747,6 +1782,7 @@ function getBarInteractionLookState(force = false) {
         exitMesh: getBarExitInteractionMesh(),
         danceMesh: getBarDanceInteractionMesh(),
         inviteMesh: getBarInviteInteractionMesh(),
+        bartendingMesh: getBarBartendingInteractionMesh(),
         force
     });
 }

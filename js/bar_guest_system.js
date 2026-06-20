@@ -4,6 +4,15 @@ import { loadCharacterFromModel, updateCharacter, getCharacterPosition, startInt
 import { getSettings } from './settings.js';
 import { getGameTimeContext, recordDialogueInteraction } from './game_state.js';
 
+const CHERNO_CARD_ID = 'special:cherno';
+const CHERNO_MODEL_PATH = 'src/_char_card/Cherno/悖谬-见习侍奉.pmx';
+const CHERNO_PROMPT_PATH = 'src/_char_card/Cherno/char_cherno_prompt.txt';
+const CHERNO_FIXED_POSE = Object.freeze({ x: 7.2, y: 0.668, z: 42.01, rotationY: -Math.PI / 2 });
+const CHERNO_LOOK_RADIUS = 5.0;
+const CHERNO_WELCOME_VOICES = Object.freeze([
+    'src/_voices/Cherno_welcome_1.wav',
+    'src/_voices/Cherno_welcome_2.wav'
+]);
 const STORAGE_KEY = 'fritia_bar_guest_cards';
 const BUILTIN_STATE_KEY = 'fritia_bar_guest_builtin_state';
 const BAR_HISTORY_KEY = 'fritia_bar_conversation_history';
@@ -69,6 +78,18 @@ const builtinFennyCard = Object.freeze({
     builtin: true,
     modelPath: FENNY_MODEL_PATH,
     promptPath: FENNY_PROMPT_PATH,
+    createdAt: 0
+});
+
+const chernoCard = Object.freeze({
+    id: CHERNO_CARD_ID,
+    name: '琴诺',
+    builtin: true,
+    special: true,
+    fixed: true,
+    dialogueTheme: 'cherno',
+    modelPath: CHERNO_MODEL_PATH,
+    promptPath: CHERNO_PROMPT_PATH,
     createdAt: 0
 });
 
@@ -272,6 +293,7 @@ function syncStoredCards() {
     state.persistedBuiltinIds = loadBuiltinState();
     for (const id of [...state.runtimes.keys()]) {
         const runtime = state.runtimes.get(id);
+        if (runtime?.card?.special) continue;
         if (runtime?.card?.builtin) {
             if (!state.persistedBuiltinIds.has(id)) unloadGuest(id);
             continue;
@@ -662,6 +684,53 @@ function getSpawnPose(index = 0) {
     return { ...fallback, rotationY: Math.random() * Math.PI * 2 };
 }
 
+function lerpAngle(a, b, t) {
+    let diff = b - a;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    return a + diff * t;
+}
+
+function faceRuntimeToward(runtime, targetPos, delta, options = {}) {
+    const cd = runtime?.cd;
+    if (!cd?.root || !targetPos) return;
+    const dx = targetPos.x - cd.root.position.x;
+    const dz = targetPos.z - cd.root.position.z;
+    if (Math.hypot(dx, dz) <= 0.01) return;
+    const targetAngle = Math.atan2(dx, dz);
+    const factor = options.immediate ? 1 : 1 - Math.exp(-(options.lerpSpeed ?? 7.0) * Math.max(0, delta));
+    cd.root.rotation.y = lerpAngle(cd.root.rotation.y, targetAngle, factor);
+    cd.faceDirection = cd.root.rotation.y;
+}
+
+function applyRuntimeHeadLook(runtime, targetPos, delta, options = {}) {
+    const cd = runtime?.cd;
+    const head = cd?.boneRef?.head;
+    if (!head || !head.parent || !targetPos) return false;
+    cd.skeleton?.update?.();
+    cd.mesh?.updateMatrixWorld?.(true);
+    const headWorldPos = new THREE.Vector3();
+    const lookDir = new THREE.Vector3();
+    const parentQuat = new THREE.Quaternion();
+    head.getWorldPosition(headWorldPos);
+    lookDir.subVectors(targetPos, headWorldPos);
+    if (lookDir.lengthSq() <= 0.01) return false;
+    head.parent.getWorldQuaternion(parentQuat).invert();
+    lookDir.applyQuaternion(parentQuat).normalize();
+    const yaw = Math.atan2(-lookDir.x, lookDir.z);
+    const pitch = Math.atan2(-lookDir.y, Math.sqrt(lookDir.x * lookDir.x + lookDir.z * lookDir.z));
+    const yawLimit = options.yawLimit ?? 0.62;
+    const pitchLimit = options.pitchLimit ?? 0.52;
+    const targetYaw = Math.max(-yawLimit, Math.min(yawLimit, yaw));
+    const targetPitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
+    const factor = options.immediate ? 1 : 1 - Math.exp(-(options.lerpSpeed ?? 6.0) * Math.max(0, delta));
+    head.rotation.y += (targetYaw - head.rotation.y) * factor;
+    head.rotation.x += (targetPitch - head.rotation.x) * factor;
+    cd.skeleton?.update?.();
+    cd.mesh?.updateMatrixWorld?.(true);
+    return true;
+}
+
 function buildGuestResourceManager(resourceUrls = []) {
     if (!resourceUrls.length) return null;
     const manager = new THREE.LoadingManager();
@@ -815,6 +884,99 @@ async function loadGuestFromResolvedSource(card, modelUrl, prompt, sourceOptions
     };
 }
 
+async function loadChernoGuest() {
+    const existing = state.runtimes.get(CHERNO_CARD_ID);
+    if (existing?.cd?.root) {
+        placeChernoRuntime(existing, { resetRotation: true });
+        existing.cd.root.visible = true;
+        return existing;
+    }
+    const prompt = await resolvePrompt(chernoCard);
+    const cd = await loadCharacterFromModel(
+        state.scene,
+        CHERNO_MODEL_PATH,
+        [],
+        state.getBarColliders?.() || [],
+        null,
+        {
+            meshName: `BarGuest_${CHERNO_CARD_ID}`,
+            displayName: chernoCard.name
+        }
+    );
+    cd.isBarGuest = true;
+    cd.isSpecialBarGuest = true;
+    cd.isFixedBarGuest = true;
+    cd.guestId = CHERNO_CARD_ID;
+    cd.dialoguePrompt = prompt;
+    cd.navigationScope = {
+        roomId: 'bar',
+        bounds: state.getBarBounds?.() || null
+    };
+    cd.waypoints = [];
+    cd.currentWaypoint = null;
+    cd.targetWaypoint = null;
+    cd.idleDuration = Number.POSITIVE_INFINITY;
+    applyIdlePose(cd);
+    const runtime = {
+        card: chernoCard,
+        cd,
+        modelObjectUrl: '',
+        resourceObjectUrls: [],
+        prompt,
+        fixedPose: CHERNO_FIXED_POSE,
+        lookRadius: CHERNO_LOOK_RADIUS
+    };
+    state.runtimes.set(CHERNO_CARD_ID, runtime);
+    placeChernoRuntime(runtime, { resetRotation: true });
+    return runtime;
+}
+
+function placeChernoRuntime(runtime, options = {}) {
+    const cd = runtime?.cd;
+    const pose = runtime?.fixedPose || CHERNO_FIXED_POSE;
+    if (!cd?.root) return;
+    cd.root.position.set(pose.x, pose.y, pose.z);
+    if (options.resetRotation || !Number.isFinite(cd.faceDirection)) {
+        cd.faceDirection = pose.rotationY;
+        cd.root.rotation.y = pose.rotationY;
+    }
+    cd.root.visible = true;
+}
+
+function updateChernoRuntime(runtime, delta) {
+    const cd = runtime?.cd;
+    if (!cd?.root?.visible) return;
+    placeChernoRuntime(runtime);
+    cd.state = 'idle';
+    cd.prevState = 'idle';
+    cd.stateTimer = 0;
+    cd.currentWaypoint = null;
+    cd.targetWaypoint = null;
+    cd.walkPathQueue = null;
+    cd.walkProgress = 0;
+    cd.walkBlend = 0;
+    applyIdlePose(cd);
+    const playerPos = state.getPlayerPosition?.();
+    if (!playerPos) return;
+    const dx = playerPos.x - cd.root.position.x;
+    const dz = playerPos.z - cd.root.position.z;
+    if (Math.hypot(dx, dz) > (runtime.lookRadius || CHERNO_LOOK_RADIUS)) {
+        cd.root.rotation.y = lerpAngle(cd.root.rotation.y, CHERNO_FIXED_POSE.rotationY, 1 - Math.exp(-4.2 * Math.max(0, delta)));
+        cd.faceDirection = cd.root.rotation.y;
+        const head = cd.boneRef?.head;
+        if (head) {
+            const factor = 1 - Math.exp(-5.0 * Math.max(0, delta));
+            head.rotation.x += (0 - head.rotation.x) * factor;
+            head.rotation.y += (0 - head.rotation.y) * factor;
+            cd.skeleton?.update?.();
+            cd.mesh?.updateMatrixWorld?.(true);
+        }
+        return;
+    }
+    faceRuntimeToward(runtime, playerPos, delta);
+    applyRuntimeHeadLook(runtime, playerPos, delta);
+}
+
 function unloadGuest(id) {
     const runtime = state.runtimes.get(id);
     if (!runtime) return;
@@ -826,6 +988,7 @@ function unloadGuest(id) {
 
 export function unloadTransientGuests() {
     for (const [id, runtime] of [...state.runtimes.entries()]) {
+        if (runtime.card?.special) continue;
         if (runtime.card.transient || (!runtime.card.builtin && !state.cards.some(card => card.id === id && !card.builtin))) {
             unloadGuest(id);
         }
@@ -834,6 +997,11 @@ export function unloadTransientGuests() {
 
 export async function loadPersistentBarGuests() {
     syncStoredCards();
+    try {
+        await loadChernoGuest();
+    } catch (err) {
+        console.warn('[BarGuest] Cherno load skipped:', err);
+    }
     for (const card of state.cards.filter(item => item.builtin && state.persistedBuiltinIds.has(item.id))) {
         try {
             await loadGuest(card);
@@ -863,6 +1031,16 @@ export function unloadAllBarGuests(options = {}) {
 export function updateBarGuests(delta) {
     for (const runtime of state.runtimes.values()) {
         if (!runtime.cd?.root?.visible) continue;
+        if (runtime.card?.id === CHERNO_CARD_ID) {
+            if (state.interactingRuntimeId === CHERNO_CARD_ID) {
+                placeChernoRuntime(runtime);
+                updateCharacter(runtime.cd, delta);
+                placeChernoRuntime(runtime);
+            } else {
+                updateChernoRuntime(runtime, delta);
+            }
+            continue;
+        }
         updateCharacter(runtime.cd, delta);
     }
 }
@@ -873,6 +1051,10 @@ export function poseBarGuestsForDance(stagePoint = { x: 0, z: 35.6 }) {
     for (const runtime of state.runtimes.values()) {
         const cd = runtime.cd;
         if (!cd?.root?.visible) continue;
+        if (runtime.card?.id === CHERNO_CARD_ID) {
+            updateChernoRuntime(runtime, 0);
+            continue;
+        }
         cd.state = 'idle';
         cd.prevState = 'idle';
         cd.stateTimer = 0;
@@ -1060,12 +1242,25 @@ function scrollDialogue() {
     });
 }
 
+function playChernoWelcomeVoice() {
+    const src = CHERNO_WELCOME_VOICES[Math.floor(Math.random() * CHERNO_WELCOME_VOICES.length)];
+    if (!src) return;
+    const audio = new Audio(src);
+    audio.volume = 0.86;
+    audio.play().catch(() => {});
+}
+
 export function startGuestInteraction(runtime) {
     if (!runtime?.cd || state.isInteracting) return false;
     state.isInteracting = true;
     state.interactingRuntimeId = runtime.card.id;
     startInteraction(runtime.cd, () => state.getPlayerPosition?.() || new THREE.Vector3());
-    document.getElementById('dialogue-ui')?.classList.add('bar-guest-dialogue');
+    const dialogueUi = document.getElementById('dialogue-ui');
+    dialogueUi?.classList.add('bar-guest-dialogue');
+    if (runtime.card.dialogueTheme === 'cherno') {
+        dialogueUi?.classList.add('bar-guest-dialogue--cherno');
+        playChernoWelcomeVoice();
+    }
     if (els.dialogueName) els.dialogueName.textContent = runtime.card.name;
     if (els.dialogueText) els.dialogueText.innerHTML = '';
     appendGuestAssistantShell(runtime.card.name).querySelector('.msg-text').textContent = `${runtime.card.name} 已经入场。想聊什么？`;
@@ -1081,8 +1276,9 @@ export function endGuestInteraction() {
     if (runtime?.cd) endInteraction(runtime.cd);
     state.isInteracting = false;
     state.interactingRuntimeId = '';
-    document.getElementById('dialogue-ui')?.classList.remove('bar-guest-dialogue');
-    document.getElementById('dialogue-ui')?.classList.add('hidden');
+    const dialogueUi = document.getElementById('dialogue-ui');
+    dialogueUi?.classList.remove('bar-guest-dialogue', 'bar-guest-dialogue--cherno');
+    dialogueUi?.classList.add('hidden');
     document.dispatchEvent(new CustomEvent('fritia-overlay-closed', { detail: { id: 'dialogue-ui' } }));
 }
 
