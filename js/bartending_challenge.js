@@ -31,7 +31,7 @@ const MIX_ACTION_GOOD = Object.freeze([
 
 const INGREDIENTS = Object.freeze({
     base: [
-        { name: '金酒', weird: false },
+        { name: '琴酒', weird: false },
         { name: '伏特加', weird: false },
         { name: '白朗姆', weird: false },
         { name: '龙舌兰', weird: false },

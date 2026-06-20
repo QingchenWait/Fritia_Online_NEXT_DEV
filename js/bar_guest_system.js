@@ -1150,8 +1150,7 @@ async function sendGuestMessage() {
                     ...history
                 ],
                 stream: true,
-                temperature: 0.85,
-                max_tokens: 220
+                temperature: 0.85
             })
         });
         if (!response.ok) throw new Error(`API 错误 (${response.status})`);

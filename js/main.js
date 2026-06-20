@@ -518,6 +518,11 @@ async function init() {
 }
 
 function onKeyDown(e) {
+    if (isGuestInteracting()) {
+        if (e.code === 'Escape') endGuestInteraction();
+        return;
+    }
+
     igniteForKey(e.code);
     if (barTransitionInProgress) return;
     if (isDanceChoiceVisible()) {
@@ -572,10 +577,6 @@ function onKeyDown(e) {
 
     if (e.code === 'KeyF') {
         if (isDanceFlowActive()) return;
-        if (isGuestInteracting()) {
-            endGuestInteraction();
-            return;
-        }
         if (isDialogueVisible()) return;
         if (isDatePanelVisible()) return;
         if (isGiftOverlayVisible()) return;
@@ -610,7 +611,6 @@ function onKeyDown(e) {
     }
 
     if (e.code === 'KeyE') {
-        if (isGuestInteracting()) return;
         if (isInteracting || isDialogueVisible()) return;
         if (isDatePanelVisible()) return;
         if (isGiftOverlayVisible()) return;
@@ -690,10 +690,6 @@ function onKeyDown(e) {
         }
         if (isInvitePanelVisible()) {
             closeInvitePanel();
-            return;
-        }
-        if (isGuestInteracting()) {
-            endGuestInteraction();
             return;
         }
         if (isDialogueVisible()) {
@@ -2253,7 +2249,7 @@ function initHistoryPanel() {
     const tabs = document.querySelectorAll('.history-tab');
 
     document.getElementById('btn-history').addEventListener('click', () => {
-        renderHistory();
+        refreshActiveHistoryTab();
         panel.classList.remove('hidden');
     });
     document.getElementById('history-close').addEventListener('click', () => {
@@ -2293,6 +2289,18 @@ function initHistoryPanel() {
             }
         });
     });
+}
+
+function refreshActiveHistoryTab() {
+    const activeTab = document.querySelector('.history-tab.active');
+    const tab = activeTab?.dataset?.tab || 'daily';
+    if (tab === 'bar') {
+        renderBarHistory();
+    } else if (tab === 'date') {
+        renderDateHistory();
+    } else {
+        renderHistory();
+    }
 }
 
 function renderHistory(dateFilter = 'all') {

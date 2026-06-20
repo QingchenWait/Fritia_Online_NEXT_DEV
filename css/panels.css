@@ -944,7 +944,9 @@
     opacity: 1;
 }
 .bartending-note-field textarea::placeholder {
-    color: rgba(255,237,244,0.42);
+    color: rgba(206,198,204,0.56);
+    -webkit-text-fill-color: rgba(206,198,204,0.56);
+    opacity: 1;
 }
 .bartending-note-field {
     grid-column: 1 / -1;

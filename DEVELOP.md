@@ -139,6 +139,7 @@ npm run dev
 - `getActivePlayerColliders()`：当前玩家碰撞体。门关闭时包含 `dreamDoorCollider`，门打开时移除。
 - `getActiveBedroomCharacterColliders()` / `getActiveDreamCharacterColliders()`：角色在不同房间的导航碰撞体。
 - `tryEnterBarSceneWithAdmission()`：旧房间南侧门的暖调闲聚准入检查。需要完成 3 次日常对话、1 次约会、1 次睡觉模式、送出 1 件礼物和制造 1 件造梦家具；未完成时在门位置投影 `#bar-admission-panel`，隐藏进入提示并显示 `按 E 关闭`，全部完成后直接调用 `enterBarScene()`。
+- `refreshActiveHistoryTab()`：打开历史对话浮层时按当前激活栏目刷新内容，确保停留在“暖调闲聚”页后再次打开也能看到最新访客/酒吧对话。
 - `enterBarScene()` / `exitBarScene()`：通过黑屏转场进入/离开暖调闲聚；切换旧房间组显示、scene background/fog、玩家碰撞体和芙提雅导航作用域。
 - `exitBarScene()` 在舞蹈流程未结束前会被拦截；出口提示保留但置灰且不携带 `data-prompt-key`，避免点击或按 E 触发返回。
 - `exportData()`：导出设置、游戏状态、日常对话、约会对话、成就、礼物、造梦家具、挂画。
@@ -330,7 +331,8 @@ LLM JSON 协议：
 - 访客重新进入酒吧时会在地图中部 `BAR_GUEST_SPAWN_AREA` 内随机出生；初始 Y 轴由出生点脚下 walkable 碰撞盒高度动态计算，不使用固定 Y 偏移，也不改动角色移动时的 Y 轴逻辑。
 - 访客只在 `currentPlayerRoomId === "bar"` 时加载、更新和互动；离开酒吧时卸载运行时资源。未保存的临时访客不会再次加载，已保存的访客下次进入酒吧自动加载。
 - 琴诺接近玩家时会在固定点转身并让头部看向玩家镜头；玩家离开判定范围后，身体会平滑转回初始朝向；对话使用独立紫色主题。玩家按 `F` 与琴诺开始对话时，会在 `src/_voices/Cherno_welcome_1.wav` 与 `src/_voices/Cherno_welcome_2.wav` 中随机播放一段欢迎语，该语音仅限琴诺角色。
-- 访客对话使用设置面板中的 OpenAI 兼容 `chat/completions` 配置，不新增后端和独立 API Key。
+- 访客对话使用设置面板中的 OpenAI 兼容 `chat/completions` 配置，不新增后端和独立 API Key；请求不设置本地 `max_tokens` 硬上限，避免琴诺、芬妮和自定义访客回复被截断。
+- 暖调闲聚访客对话开始后，全局 `F/E/1/2` 等功能键不再触发游戏交互，按键会保留给文本输入；访客对话只通过 `Esc` 或右上角关闭按钮手动结束。
 
 存储：
 

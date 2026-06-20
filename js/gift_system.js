@@ -267,7 +267,7 @@ function buildGiftRequestBody(detail, settings, mode) {
         ],
         stream: true,
         temperature: mode === 'strict' ? 0.25 : 0.65,
-        max_tokens: 180
+        max_tokens: 256
     };
 
     return requestBody;

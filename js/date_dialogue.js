@@ -285,7 +285,7 @@ async function startDateConversation(loc) {
                 messages: [{ role: 'system', content: systemPrompt }],
                 stream: true,
                 temperature: 0.9,
-                max_tokens: 300
+                max_tokens: 350
             }),
             signal: dateAbortController.signal
         });
@@ -387,7 +387,7 @@ async function handleDateSend() {
                 ],
                 stream: true,
                 temperature: 0.9,
-                max_tokens: 300
+                max_tokens: 350
             }),
             signal: dateAbortController.signal
         });

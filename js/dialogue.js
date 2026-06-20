@@ -183,7 +183,7 @@ async function handleSend() {
                 ],
                 stream: true,
                 temperature: 0.85,
-                max_tokens: 200
+                max_tokens: 350
             }),
             signal: abortController.signal
         });
