@@ -7,6 +7,11 @@ const DANCE_CHOICE_TIMEOUT_MS = 5000;
 // Manual tuning parameter: target world Y for the dancer's lowest point at the stage start.
 // Lower it if the dancer floats; raise it if the feet sink into the stage.
 const DANCE_STAGE_Y_OFFSET = 0.52;
+const LOVE_LEE_PRESET = Object.freeze({
+    title: 'Love Lee',
+    vmdPath: 'src/_vmd/love_lee/love_lee.vmd',
+    audioPath: 'src/_vmd/love_lee/love_lee_bgm.wav'
+});
 
 const els = {};
 const state = {
@@ -14,7 +19,9 @@ const state = {
     options: {},
     selectedModelPath: '',
     vmdFile: null,
+    vmdPreset: null,
     audioFile: null,
+    audioPreset: null,
     audioUrl: null,
     audio: null,
     clip: null,
@@ -49,6 +56,7 @@ function cacheElements() {
     els.audioInput = document.getElementById('dance-audio-file');
     els.vmdPick = document.getElementById('dance-vmd-pick');
     els.audioPick = document.getElementById('dance-audio-pick');
+    els.presetStage = document.getElementById('dance-preset-stage');
     els.vmdName = document.getElementById('dance-vmd-name');
     els.audioName = document.getElementById('dance-audio-name');
     els.modelList = document.getElementById('dance-model-list');
@@ -63,6 +71,12 @@ function bindEvents() {
     els.close?.addEventListener('click', () => closeDancePanel());
     els.vmdPick?.addEventListener('click', () => els.vmdInput?.click());
     els.audioPick?.addEventListener('click', () => els.audioInput?.click());
+    els.presetStage?.addEventListener('click', loadLoveLeePreset);
+    els.presetStage?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        loadLoveLeePreset();
+    });
     els.vmdInput?.addEventListener('change', handleVmdFileChanged);
     els.audioInput?.addEventListener('change', handleAudioFileChanged);
     els.start?.addEventListener('click', () => { void startDanceFromPanel(); });
@@ -106,6 +120,7 @@ function renderModelChoices() {
 function handleVmdFileChanged(event) {
     const file = event.target.files?.[0] || null;
     state.vmdFile = file;
+    state.vmdPreset = null;
     state.clip = null;
     refreshFileSummaries();
     setStatus(file ? 'VMD 动作已就绪，选择模型后即可加载。' : '导入 VMD 动作后即可开场。');
@@ -114,14 +129,41 @@ function handleVmdFileChanged(event) {
 function handleAudioFileChanged(event) {
     const file = event.target.files?.[0] || null;
     state.audioFile = file;
+    state.audioPreset = null;
     releaseAudioUrl();
     refreshFileSummaries();
 }
 
+function loadLoveLeePreset() {
+    if (state.busy || state.mode !== 'idle') return;
+    state.vmdFile = null;
+    state.audioFile = null;
+    state.vmdPreset = { name: `${LOVE_LEE_PRESET.title}.vmd`, path: LOVE_LEE_PRESET.vmdPath };
+    state.audioPreset = { name: `${LOVE_LEE_PRESET.title}.wav`, path: LOVE_LEE_PRESET.audioPath };
+    state.clip = null;
+    releaseAudioUrl();
+    if (els.vmdInput) els.vmdInput.value = '';
+    if (els.audioInput) els.audioInput.value = '';
+    refreshFileSummaries();
+    setStatus(`${LOVE_LEE_PRESET.title} 预设舞曲已就绪，选择模型后即可开场。`, 'busy');
+}
+
 function refreshFileSummaries() {
-    if (els.vmdName) els.vmdName.textContent = state.vmdFile ? compactFileName(state.vmdFile.name) : '未选择 VMD';
-    if (els.audioName) els.audioName.textContent = state.audioFile ? compactFileName(state.audioFile.name) : '可选音频';
-    if (els.start) els.start.disabled = !state.vmdFile || state.busy;
+    if (els.vmdName) {
+        els.vmdName.textContent = state.vmdFile
+            ? compactFileName(state.vmdFile.name)
+            : state.vmdPreset
+                ? compactFileName(state.vmdPreset.name)
+                : '未选择 VMD';
+    }
+    if (els.audioName) {
+        els.audioName.textContent = state.audioFile
+            ? compactFileName(state.audioFile.name)
+            : state.audioPreset
+                ? compactFileName(state.audioPreset.name)
+                : '可选音频';
+    }
+    if (els.start) els.start.disabled = !(state.vmdFile || state.vmdPreset) || state.busy;
 }
 
 function compactFileName(name) {
@@ -187,7 +229,7 @@ export function updateDanceSystem(delta) {
 }
 
 async function startDanceFromPanel() {
-    if (state.busy || !state.vmdFile || !state.options.getCharacterData?.()) return;
+    if (state.busy || !(state.vmdFile || state.vmdPreset) || !state.options.getCharacterData?.()) return;
     state.busy = true;
     state.mode = 'loading';
     refreshFileSummaries();
@@ -224,16 +266,17 @@ async function ensureSelectedModel() {
 function loadVmdClip() {
     const cd = state.options.getCharacterData?.();
     if (!cd?.mesh) return Promise.reject(new Error('角色模型尚未加载'));
-    if (!state.vmdFile) return Promise.reject(new Error('请选择 VMD 动作文件'));
+    if (!state.vmdFile && !state.vmdPreset) return Promise.reject(new Error('请选择 VMD 动作文件'));
 
     const loader = new MMDLoader();
-    const url = URL.createObjectURL(state.vmdFile);
+    const usingObjectUrl = Boolean(state.vmdFile);
+    const url = usingObjectUrl ? URL.createObjectURL(state.vmdFile) : state.vmdPreset.path;
     return new Promise((resolve, reject) => {
         loader.loadAnimation(
             url,
             cd.mesh,
             (clip) => {
-                URL.revokeObjectURL(url);
+                if (usingObjectUrl) URL.revokeObjectURL(url);
                 if (!clip || !Number.isFinite(clip.duration) || clip.duration <= 0) {
                     reject(new Error('VMD 动作时长无效'));
                     return;
@@ -242,7 +285,7 @@ function loadVmdClip() {
             },
             undefined,
             (err) => {
-                URL.revokeObjectURL(url);
+                if (usingObjectUrl) URL.revokeObjectURL(url);
                 reject(err);
             }
         );
@@ -344,7 +387,9 @@ function clearChoiceTimer() {
 
 function resetImportedFiles() {
     state.vmdFile = null;
+    state.vmdPreset = null;
     state.audioFile = null;
+    state.audioPreset = null;
     state.clip = null;
     releaseAudioUrl();
     if (els.vmdInput) els.vmdInput.value = '';
@@ -471,10 +516,14 @@ function clearDanceScale() {
 }
 
 function startAudio() {
-    if (!state.audioFile) return;
+    if (!state.audioFile && !state.audioPreset) return;
     releaseAudioUrl();
-    state.audioUrl = URL.createObjectURL(state.audioFile);
-    state.audio = new Audio(state.audioUrl);
+    if (state.audioFile) {
+        state.audioUrl = URL.createObjectURL(state.audioFile);
+        state.audio = new Audio(state.audioUrl);
+    } else {
+        state.audio = new Audio(state.audioPreset.path);
+    }
     state.audio.volume = 0.82;
     state.audio.currentTime = 0;
     state.audio.play().catch((err) => {

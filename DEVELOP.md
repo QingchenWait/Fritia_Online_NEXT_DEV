@@ -255,7 +255,8 @@ npm run dev
 - 管理暖调闲聚舞台的 `#dance-panel` 舞曲选择浮层。
 - 使用 `MMDLoader.loadAnimation()` 加载玩家临时导入的本地 `.vmd` 文件，使用 `MMDAnimationHelper` 播放到当前选择的芙提雅 PMX 模型上。
 - 可临时导入本地音频文件并随 VMD 同步开始；VMD 播放结束时立即停止音频。
-- 舞蹈开始时把芙提雅放置到 `X=0, Z=35.6`，并使用 `js/dance_system.js` 顶部的 `DANCE_STAGE_Y_OFFSET` 作为舞蹈显示层脚底目标 Y；该值当前为 `0.62`，可独立手动微调。
+- 点击 `#dance-preset-stage`（`STAGE POSITION` 卡片）会加载项目内置 `Love Lee` 预设，资源位于 `src/_vmd/love_lee/love_lee.vmd` 和 `src/_vmd/love_lee/love_lee_bgm.wav`，仍只作为临时舞曲源，不写入存档。
+- 舞蹈开始时把芙提雅放置到 `X=0, Z=35.6`，并使用 `js/dance_system.js` 顶部的 `DANCE_STAGE_Y_OFFSET` 作为舞蹈显示层脚底目标 Y；该值当前为 `0.52`，可独立手动微调。
 - 舞蹈坐标与普通行动坐标隔离：VMD helper 每帧只在 `danceCoordinate.rawPosition` 上解算，显示时再临时加上舞蹈 Y 偏移；退出流程时丢弃 `danceCoordinate`，再由酒吧普通碰撞/导航重新计算角色站立高度。
 - 播放期间 VMD 优先，角色可按动作序列四周移动并允许穿模；角色 `mesh.scale` 锁定为进入舞蹈时的游戏预设缩放，不改 VMD 骨骼动作解算。
 - VMD 结束后显示 `#dance-curtain-bar`，按 `1` 或点左侧按钮重播，按 `2`、点右侧按钮或 5 秒无操作则结束舞蹈流程。
