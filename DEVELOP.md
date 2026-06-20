@@ -2,7 +2,7 @@
 
 更新时间：2026-06-19
 
-本文是当前静态 Three.js 项目的开发事实源。项目不依赖后端服务，所有游戏数据、设置、历史、成就和造梦家具都存储在浏览器 `localStorage` 中，并通过前端导出/导入 JSON 机制迁移。
+本文是当前静态 Three.js 项目的开发事实源。项目不依赖后端服务，游戏数据、设置、历史、成就和造梦家具主要存储在浏览器 `localStorage` 中；自定义访客 PMX/人格文档存储在 IndexedDB，并通过前端 ZIP 存档机制迁移。
 
 ## 项目概览
 
@@ -12,7 +12,7 @@ Fritia Online NEXT 是一个纯静态网页 3D 互动应用：
 - 角色模型：PMX/MMD，使用 `MMDLoader` 加载。
 - 控制方式：桌面端 Pointer Lock 第一人称控制，移动端触控摇杆与视角滑动。
 - 对话能力：复用设置面板中的 OpenAI 兼容 `chat/completions` API。
-- 数据存储：`localStorage`，导出/导入 JSON。
+- 数据存储：`localStorage` + 访客资源 IndexedDB，导出/导入 ZIP（兼容旧 JSON 导入）。
 - 启动方式：`npm run dev`，默认等价于 `npx serve . -p 3000 --cors`。
 
 禁止事项：
@@ -51,7 +51,9 @@ fritia_online_v3/
 │   ├── dream_system.js
 │   ├── room_panorama.js
 │   ├── dance_system.js
+│   ├── bar_guest_system.js
 │   ├── bar_performance.js
+│   ├── zip_store.js
 │   ├── game_state.js
 │   ├── gift_system.js
 │   ├── main.js
@@ -217,6 +219,7 @@ npm run dev
 - 自动扫描地图三角面生成运行时 AABB 碰撞盒，并通过 `userData.walkableHeight` / `surfaceYAt` / `ignoreZones` 标记低台阶、平台和楼梯坡面。
 - 提供不可见出口交互平面；酒吧内看向出口显示 `按 E 返回卧室`。
 - 提供不可见舞台互动平面 `BarDanceInvisiblePlane`：范围固定为 `X=-4.0~4.0`、`Y=0.0~4.5`、`Z=32.5`，只用于准星命中检测，不加入碰撞体。
+- 提供不可见邀请互动体 `BarInviteInvisibleBox`：范围固定为 `X=-1.0~1.0`、`Y=0.67~1.07`、`Z=46.5~49.1`，只用于准星命中检测，不加入碰撞体。
 
 导出：
 
@@ -226,6 +229,7 @@ npm run dev
 - `getBarSpawn()`：返回玩家出生相机位置、看向点和芙提雅出生点；默认优先使用地图 X/Z 中央，若被碰撞体占用会搜索附近可站立点。
 - `getBarExitInteractionMesh()`：返回出口不可见交互平面。
 - `getBarDanceInteractionMesh()`：返回舞台不可见交互平面。
+- `getBarInviteInteractionMesh()`：返回邀请不可见交互体。
 
 运行约定：
 
@@ -267,6 +271,33 @@ npm run dev
 - 每次重新打开 `#dance-panel` 都会清空上次临时选择的 VMD/音频文件状态和文件名显示。
 - 舞蹈流程中玩家移动和视角不锁定；角色日常 AI、F 对话和酒吧返回宿舍会被暂停，返回宿舍提示置灰。
 - 关闭 `#dance-panel` 时派发 `fritia-overlay-closed`，并已加入 `controls.js` overlay 管理列表。
+
+## 暖调闲聚访客系统：`js/bar_guest_system.js`
+
+职责：
+
+- 管理 `#bar-guest-panel` 发起邀请浮层；看向 `BarInviteInvisibleBox` 时显示 `按 E 邀请其他人入场`。
+- 内置候选角色 `芬妮`：PMX 位于 `src/_char_card/fenny/芬妮-澄意 夕晖蜜约.pmx`，人格设定位于 `src/_char_card/fenny/char_fenny_prompt.txt`。
+- 自定义角色通过本地 PMX 文件、同目录贴图/材质资源和人格设定文档导入；PMX 上传后在浮层中显示临时预览，读取期间显示圆形加载动画。浏览器无法仅凭单个本地文件授权枚举其目录；实现会扫描 PMX 内贴图文件名，并从用户同次选择的文件中自动匹配需要的贴图资源。
+- 新角色运行时通过 `character.js#loadCharacterFromModel()` 复用芙提雅的缩放、行走、寻路和姿态逻辑，但角色数据、人格 prompt、对话配色和生命周期独立。
+- 访客重新进入酒吧时会在地图中部 `BAR_GUEST_SPAWN_AREA` 内随机出生；初始 Y 轴由出生点脚下 walkable 碰撞盒高度动态计算，不使用固定 Y 偏移，也不改动角色移动时的 Y 轴逻辑。
+- 访客只在 `currentPlayerRoomId === "bar"` 时加载、更新和互动；离开酒吧时卸载运行时资源。未保存的临时访客不会再次加载，已保存的访客下次进入酒吧自动加载。
+- 访客对话使用设置面板中的 OpenAI 兼容 `chat/completions` 配置，不新增后端和独立 API Key。
+
+存储：
+
+- `localStorage.fritia_bar_guest_cards`：自定义访客元数据，包含 `id/name/modelPath/promptPath/modelFileName/promptFileName/assetPaths/previewDataUrl/createdAt`。
+- `localStorage.fritia_bar_guest_builtin_state`：内置访客保留状态，目前记录已邀请并应在重进酒吧时自动加载的内置角色 id，例如 `builtin:fenny`。
+- `localStorage.fritia_bar_conversation_history`：暖调闲聚中访客对话历史；芙提雅在酒吧中的对话仍保存在 `fritia_chat_history`，但记录 `scene:"bar"` 并在历史 UI 中归入暖调闲聚。
+- IndexedDB `fritia_bar_guest_assets/assets`：保存用户导入的 PMX 和人格文档 Blob，key 使用 JSON 中记录的相对路径，例如 `bar_guests/<id>/<file>.pmx`。
+
+## ZIP 存档：`js/zip_store.js`
+
+职责：
+
+- 导出文件改为 `.zip`，根目录包含 `save.json`，并包含自定义访客的 PMX/人格文档资源。
+- `save.json` 记录访客资源相对路径，不直接内嵌大文件；内置访客是否已保留入场记录在 `barGuestBuiltinState.activeIds`。
+- 导入 `.zip` 时读取 `save.json`，把访客资源写入 IndexedDB，再恢复 `barGuestCards` 和 `barGuestBuiltinState`；旧 `.json` 存档仍兼容导入，但不会携带自定义 PMX 资源。
 
 ## 控制系统：`js/controls.js`
 
@@ -790,6 +821,7 @@ DOM ID：
 
 - `#history-panel`
 - `#history-list`
+- `#bar-history-list`
 - `#date-history-list`
 - `#history-date-filter`
 - `#history-close`
@@ -874,6 +906,23 @@ DOM ID：
 - `#dream-editor-style-progress-fill`
 - `#dream-editor-status`
 
+暖调闲聚访客：
+
+- `#bar-guest-panel`
+- `#bar-guest-close`
+- `#bar-guest-card-list`
+- `#bar-guest-preview`
+- `#bar-guest-name`
+- `#bar-guest-pmx-file`
+- `#bar-guest-prompt-file`
+- `#bar-guest-pmx-pick`
+- `#bar-guest-prompt-pick`
+- `#bar-guest-pmx-name`
+- `#bar-guest-prompt-name`
+- `#bar-guest-status`
+- `#bar-guest-save`
+- `#bar-guest-invite`
+
 家具位置 overlay：
 
 - `#dream-placement-editor-panel`
@@ -928,6 +977,9 @@ DOM ID：
 - `fritia_game_state`：游戏时间、数据金、好感、统计、礼物。
 - `fritia_chat_history`：日常对话历史。
 - `fritia_date_history`：约会对话历史。
+- `fritia_bar_conversation_history`：暖调闲聚访客对话历史。
+- `fritia_bar_guest_cards`：暖调闲聚自定义访客元数据；PMX/人格文档 Blob 存储于 IndexedDB `fritia_bar_guest_assets/assets`。
+- `fritia_bar_guest_builtin_state`：暖调闲聚内置访客保留状态；当前用于记录芬妮是否应随酒吧场景自动加载。
 - `fritia_achievements`：成就解锁与通知状态。
 - `fritia_painting`：挂画图片 data URL。
 - `fritia_dream_furniture`：造梦家具记录数组。
@@ -991,12 +1043,16 @@ DOM ID：
 - `settings`
 - `conversationHistory`
 - `dateConversationHistory`
+- `barConversations`
+- `barGuestBuiltinState`
+- `barGuestCards`
 - `painting`
 
 导入策略：
 
 - `gameState` 使用 `importGameState()` 规范化。
 - `conversationHistory`、`dateConversationHistory` 覆盖式导入。
+- `barConversations` 覆盖式导入；`barGuestBuiltinState` 覆盖式恢复内置访客保留状态；`barGuestCards` 按 id 合并并恢复 IndexedDB 资源。
 - `dreamFurniture` 按 `id` 去重合并，坏 spec 或不安全摆放会跳过，不中断整体导入。
 - `achievements` 合并 timestamp。
 - `settings` 和 `painting` 若存在则导入。
@@ -1097,6 +1153,11 @@ Escape：
 8. 在舞曲选择中导入本地 `.vmd`，可选导入音频并选择芙提雅模型；点击开始后浮层关闭，玩家仍可 WASD 移动和转动视角，芙提雅从 `X=0, Z=35.6` 且脚底目标 Y 为 `DANCE_STAGE_Y_OFFSET` 的位置开始播放 VMD。
 9. 舞蹈期间看向出口时 `按 E 返回宿舍` 灰色不可点击，按 E 不返回，也不触发提示星光；VMD 结束时音频停止。
 10. VMD 结束后显示绿色 `1 再来一次` 和粉色 `2 喝彩谢幕`；按 1 或点左侧按钮重播，按 2、点右侧按钮或等待 5 秒后结束舞蹈流程，移除舞台 Y 偏移并恢复角色自由行动。
+11. 酒吧内看向 `X=-1.0~1.0, Y=0.67~1.07, Z=46.5~49.1` 邀请体，提示 `按 E 邀请其他人入场`，按 E 打开 `#bar-guest-panel`。
+12. 在邀请面板中可直接选择内置芬妮入场；首次邀请芬妮后会写入内置访客保留状态，退出并重新进入酒吧、刷新页面或导入导出存档后仍会自动加载；导入 PMX 和人格文档后可临时邀请，保存后加入候选列表，删除按钮可删除自定义角色但不能删除芬妮。
+13. 访客只在酒吧内移动和对话；离开酒吧后临时访客卸载，已保存访客和已保留的内置访客下次进入酒吧自动加载。
+14. 酒吧内芙提雅对话和访客对话都显示在历史面板的“暖调闲聚”页；芙提雅在卧室/造梦空间的对话仍显示在“日常对话”页。
+15. 导出生成 `.zip`，包含 `save.json` 与自定义访客资源；导入 ZIP 后可恢复自定义访客并在酒吧重新加载。
 
 旧功能回归：
 

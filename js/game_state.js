@@ -39,6 +39,8 @@ function createDefaultStats() {
         maxGiftEstimate: 0,
         dailyUserMessages: 0,
         dailyBotMessages: 0,
+        barUserMessages: 0,
+        barBotMessages: 0,
         dateUserMessages: 0,
         dateBotMessages: 0,
         dateInteractionLocations: [],
@@ -58,6 +60,8 @@ function normalizeStats(data = {}) {
         maxGiftEstimate: Math.max(0, Math.round(Number(data.maxGiftEstimate) || 0)),
         dailyUserMessages: Math.max(0, Math.round(Number(data.dailyUserMessages) || 0)),
         dailyBotMessages: Math.max(0, Math.round(Number(data.dailyBotMessages) || 0)),
+        barUserMessages: Math.max(0, Math.round(Number(data.barUserMessages) || 0)),
+        barBotMessages: Math.max(0, Math.round(Number(data.barBotMessages) || 0)),
         dateUserMessages: Math.max(0, Math.round(Number(data.dateUserMessages) || 0)),
         dateBotMessages: Math.max(0, Math.round(Number(data.dateBotMessages) || 0)),
         dateInteractionLocations: [...new Set(list(data.dateInteractionLocations))],
@@ -280,6 +284,9 @@ export function recordDialogueInteraction(type, assistantText = '', locationId =
         if (locationId && !state.stats.dateInteractionLocations.includes(locationId)) {
             state.stats.dateInteractionLocations.push(locationId);
         }
+    } else if (type === 'bar') {
+        state.stats.barUserMessages += 1;
+        state.stats.barBotMessages += 1;
     } else {
         state.stats.dailyUserMessages += 1;
         state.stats.dailyBotMessages += 1;
@@ -464,6 +471,8 @@ function mergeStats(current, imported) {
         maxGiftEstimate: Math.max(current.maxGiftEstimate, imported.maxGiftEstimate),
         dailyUserMessages: Math.max(current.dailyUserMessages, imported.dailyUserMessages),
         dailyBotMessages: Math.max(current.dailyBotMessages, imported.dailyBotMessages),
+        barUserMessages: Math.max(current.barUserMessages, imported.barUserMessages),
+        barBotMessages: Math.max(current.barBotMessages, imported.barBotMessages),
         dateUserMessages: Math.max(current.dateUserMessages, imported.dateUserMessages),
         dateBotMessages: Math.max(current.dateBotMessages, imported.dateBotMessages),
         dateInteractionLocations: [...new Set([...current.dateInteractionLocations, ...imported.dateInteractionLocations])],

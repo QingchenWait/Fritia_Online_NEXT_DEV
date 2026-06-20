@@ -3,7 +3,7 @@ import { initScene } from './scene.js';
 import { createRoom } from './room.js';
 import { initControls } from './controls.js';
 import { loadCharacter, updateCharacter, getCharacterPosition, startInteraction, endInteraction, startWaving, swapModel, applySleepingPose, applyIdlePose, updateBlink, setSittingEnabled, setCharacterNavigationScope, refreshCharacterNavigationData, forceCharacterIntoRoom, moveCharacterToWaypoint } from './character.js';
-import { initDialogue, showDialogue, hideDialogue, isDialogueVisible, getConversationHistory, importConversationHistory } from './dialogue.js';
+import { initDialogue, showDialogue, hideDialogue, isDialogueVisible, getConversationHistory, importConversationHistory, setDialogueSceneContext } from './dialogue.js';
 import { initDateDialogue, openDatePanel, closeDatePanel, isDatePanelVisible, getDateConversationHistory, importDateConversationHistory, getDateLocations } from './date_dialogue.js';
 import { initSettings } from './settings.js';
 import { addAffinity, exportGameState, formatGameDateTime, getAffinity, getGameTimeInfo, getMoney, importGameState, initGameState, recordHeadPat, recordModelUsed, updateGameTime } from './game_state.js';
@@ -48,6 +48,7 @@ import {
     getBarCharacterColliders,
     getBarDanceInteractionMesh,
     getBarExitInteractionMesh,
+    getBarInviteInteractionMesh,
     getBarPlayerColliders,
     getBarSpawn,
     getBarWaypoints,
@@ -66,6 +67,30 @@ import {
     updateDanceSystem
 } from './dance_system.js';
 import { createBarInteractionProbe } from './bar_performance.js';
+import {
+    closeInvitePanel,
+    endGuestInteraction,
+    exportBarGuestAssets,
+    exportBarGuestBuiltinState,
+    exportBarGuestCards,
+    exportBarGuestCardsByPaths,
+    findNearestGuest,
+    getBarConversationHistory,
+    getGuestPosition,
+    importBarConversationHistory,
+    importBarGuestBuiltinState,
+    importBarGuestCards,
+    initBarGuestSystem,
+    isGuestInteracting,
+    isInvitePanelVisible,
+    loadPersistentBarGuests,
+    openInvitePanel,
+    poseBarGuestsForDance,
+    startGuestInteraction,
+    unloadAllBarGuests,
+    updateBarGuests
+} from './bar_guest_system.js';
+import { createZip, readZip, readZipText } from './zip_store.js';
 
 let scene, camera, renderer;
 let controlsModule, charData;
@@ -291,7 +316,18 @@ async function init() {
         swapToModel: swapToDanceModel,
         placeCharacterAtStage,
         applyIdlePose,
+        onDanceStart: (stagePose) => {
+            if (isBarSceneActive) poseBarGuestsForDance(stagePose);
+        },
         onDanceFinished: restoreCharacterAfterDance
+    });
+    initBarGuestSystem({
+        scene,
+        controlsModule,
+        getBarBounds,
+        getBarWaypoints,
+        getBarColliders: getBarCharacterColliders,
+        getPlayerPosition: () => camera?.position || new THREE.Vector3()
     });
     initPainting();
     refreshCharacterRoomScope(true);
@@ -303,6 +339,10 @@ async function init() {
         if (code) onKeyDown({ code });
     });
     document.addEventListener('fritia-overlay-closed', (e) => {
+        if (isGuestInteracting()) {
+            controlsModule.resumeControlMode();
+            return;
+        }
         if (e.detail?.id === 'dialogue-ui' && isInteracting) {
             isInteracting = false;
             endInteraction(charData);
@@ -325,9 +365,9 @@ async function init() {
     document.getElementById('btn-achievements').addEventListener('click', () => {
         controlsModule.releaseControlMode({ resumeOnClose: true });
     });
-    document.getElementById('btn-export').addEventListener('click', exportData);
+    document.getElementById('btn-export').addEventListener('click', () => { void exportDataZip(); });
     document.getElementById('btn-import').addEventListener('click', importData);
-    document.getElementById('import-file').addEventListener('change', handleImportFile);
+    document.getElementById('import-file').addEventListener('change', handleImportFileV2);
     initHistoryPanel();
     initPromptButtons();
 
@@ -413,11 +453,16 @@ function onKeyDown(e) {
 
     if (e.code === 'KeyF') {
         if (isDanceFlowActive()) return;
+        if (isGuestInteracting()) {
+            endGuestInteraction();
+            return;
+        }
         if (isDialogueVisible()) return;
         if (isDatePanelVisible()) return;
         if (isGiftOverlayVisible()) return;
         if (isDreamOverlayVisible()) return;
         if (isDanceOverlayVisible()) return;
+        if (isInvitePanelVisible()) return;
 
         if (isSleeping) {
             petFritiaHead();
@@ -429,6 +474,14 @@ function onKeyDown(e) {
             return;
         }
 
+        if (isBarSceneActive) {
+            const guest = findNearestGuest(camera.position);
+            if (guest && controlsModule.isNearCharacter(getGuestPosition(guest))) {
+                startGuestInteraction(guest);
+                return;
+            }
+        }
+
         const charPos = getCharacterPosition(charData);
         if (controlsModule.isNearCharacter(charPos)) {
             startInteractionMode(charPos);
@@ -436,15 +489,19 @@ function onKeyDown(e) {
     }
 
     if (e.code === 'KeyE') {
+        if (isGuestInteracting()) return;
         if (isInteracting || isDialogueVisible()) return;
         if (isDatePanelVisible()) return;
         if (isGiftOverlayVisible()) return;
         if (isDreamOverlayVisible()) return;
         if (isDanceOverlayVisible()) return;
+        if (isInvitePanelVisible()) return;
         if (controlsModule && controlsModule.state.isLocked) {
             const barLook = isBarSceneActive ? getBarInteractionLookState(true) : null;
             if (isSleeping) {
                 exitSleepMode();
+            } else if (barLook?.invite && !isDanceFlowActive()) {
+                openInvitePanel();
             } else if (barLook?.dance && !isDanceFlowActive()) {
                 openDancePanel();
             } else if (isDanceFlowActive() && barLook?.exit) {
@@ -501,6 +558,14 @@ function onKeyDown(e) {
             closeDancePanel();
             return;
         }
+        if (isInvitePanelVisible()) {
+            closeInvitePanel();
+            return;
+        }
+        if (isGuestInteracting()) {
+            endGuestInteraction();
+            return;
+        }
         if (isDialogueVisible()) {
             endInteractionMode();
         }
@@ -520,6 +585,11 @@ function playTalkSound() {
 
 function startInteractionMode(charPos) {
     isInteracting = true;
+    setDialogueSceneContext({
+        scene: isBarSceneActive ? 'bar' : 'daily',
+        characterId: 'fritia',
+        characterName: '芙提雅'
+    });
     startInteraction(charData, () => camera.position);
     showDialogue();
     controlsModule.releaseControlMode({ resumeOnClose: true });
@@ -912,6 +982,7 @@ async function enterBarScene() {
         applyBarNavigationScope();
         controlsModule?.setColliders(getActivePlayerColliders());
         controlsModule?.resolveCameraCollisions?.();
+        await loadPersistentBarGuests();
 
         await fadeFromBlack();
         needsFadeIn = false;
@@ -950,6 +1021,7 @@ async function exitBarScene() {
         camera.updateMatrixWorld(true);
         controlsModule?.setColliders(getActivePlayerColliders());
         controlsModule?.resolveCameraCollisions?.();
+        unloadAllBarGuests();
 
         setCharacterNavigationScope(charData, {
             roomId: 'bedroom',
@@ -1130,6 +1202,9 @@ function animate() {
                 refreshCharacterRoomScope();
                 updateCharacter(charData, delta);
             }
+            if (isBarSceneActive && !isDanceFlowActive()) {
+                updateBarGuests(delta);
+            }
         }
         if (!dreamCinematic) updateInteractionPrompt();
     }
@@ -1170,7 +1245,7 @@ function updateInteractionPrompt() {
     const charPos = getCharacterPosition(charData);
     const nearChar = controlsModule.isNearCharacter(charPos);
     if (isBarSceneActive) {
-        updateBarInteractionPrompt(prompt, paintingPrompt, dreamPaintingPrompt, nearChar);
+        updateBarInteractionPromptV2(prompt, paintingPrompt, dreamPaintingPrompt, nearChar);
         stackPromptButtons(prompt, paintingPrompt, dreamPaintingPrompt);
         return;
     }
@@ -1289,6 +1364,46 @@ function updateBarInteractionPrompt(prompt, paintingPrompt, dreamPaintingPrompt,
     paintingPrompt.classList.remove('is-disabled');
     const look = getBarInteractionLookState();
     if (look.dance && !isDanceFlowActive()) {
+        paintingPrompt.innerHTML = '按 <kbd>E</kbd> 观看跳舞';
+        paintingPrompt.dataset.promptKey = 'KeyE';
+        paintingPrompt.classList.remove('hidden');
+    } else if (look.exit) {
+        paintingPrompt.innerHTML = '按 <kbd>E</kbd> 返回宿舍';
+        paintingPrompt.dataset.promptKey = 'KeyE';
+        paintingPrompt.classList.remove('hidden');
+        if (isDanceFlowActive()) {
+            delete paintingPrompt.dataset.promptKey;
+            paintingPrompt.classList.add('is-disabled');
+        }
+    } else {
+        paintingPrompt.classList.add('hidden');
+    }
+}
+
+function updateBarInteractionPromptV2(prompt, paintingPrompt, dreamPaintingPrompt, nearChar) {
+    const nearestGuest = findNearestGuest(camera.position);
+    const nearGuest = nearestGuest && controlsModule?.isNearCharacter(getGuestPosition(nearestGuest));
+    if (nearGuest && !isDanceFlowActive()) {
+        prompt.innerHTML = `按 <kbd>F</kbd> 与${nearestGuest.card.name}对话`;
+        prompt.dataset.promptKey = 'KeyF';
+        prompt.classList.remove('hidden');
+    } else if (nearChar && !isDanceFlowActive()) {
+        prompt.innerHTML = '按 <kbd>F</kbd> 与芙提雅对话';
+        prompt.dataset.promptKey = 'KeyF';
+        prompt.classList.remove('hidden');
+    } else {
+        prompt.classList.add('hidden');
+    }
+
+    if (!paintingPrompt) return;
+    dreamPaintingPrompt?.classList.add('hidden');
+    paintingPrompt.classList.remove('is-disabled');
+    const look = getBarInteractionLookState();
+    if (look.invite && !isDanceFlowActive()) {
+        paintingPrompt.innerHTML = '按 <kbd>E</kbd> 邀请其他人入场';
+        paintingPrompt.dataset.promptKey = 'KeyE';
+        paintingPrompt.classList.remove('hidden');
+    } else if (look.dance && !isDanceFlowActive()) {
         paintingPrompt.innerHTML = '按 <kbd>E</kbd> 观看跳舞';
         paintingPrompt.dataset.promptKey = 'KeyE';
         paintingPrompt.classList.remove('hidden');
@@ -1631,6 +1746,7 @@ function getBarInteractionLookState(force = false) {
         raycaster,
         exitMesh: getBarExitInteractionMesh(),
         danceMesh: getBarDanceInteractionMesh(),
+        inviteMesh: getBarInviteInteractionMesh(),
         force
     });
 }
@@ -1882,6 +1998,7 @@ async function playStartupVoice() {
 function initHistoryPanel() {
     const panel = document.getElementById('history-panel');
     const list = document.getElementById('history-list');
+    const barList = document.getElementById('bar-history-list');
     const dateList = document.getElementById('date-history-list');
     const selectWrapper = document.getElementById('history-date-filter');
     const selectSelected = selectWrapper.querySelector('.select-selected');
@@ -1913,10 +2030,17 @@ function initHistoryPanel() {
             selectOptions.classList.add('hidden');
             if (tab.dataset.tab === 'daily') {
                 list.classList.remove('hidden');
+                barList?.classList.add('hidden');
                 dateList.classList.add('hidden');
                 renderHistory();
+            } else if (tab.dataset.tab === 'bar') {
+                list.classList.add('hidden');
+                barList?.classList.remove('hidden');
+                dateList.classList.add('hidden');
+                renderBarHistory();
             } else {
                 list.classList.add('hidden');
+                barList?.classList.add('hidden');
                 dateList.classList.remove('hidden');
                 renderDateHistory();
             }
@@ -1929,7 +2053,7 @@ function renderHistory(dateFilter = 'all') {
     const selectWrapper = document.getElementById('history-date-filter');
     const selectSelected = selectWrapper.querySelector('.select-selected');
     const selectOptions = selectWrapper.querySelector('.select-options');
-    const history = getConversationHistory();
+    const history = getConversationHistory().filter(m => (m.scene || 'daily') !== 'bar');
 
     const dates = [...new Set(history.map(m => {
         const d = new Date(m.ts || 0);
@@ -1993,6 +2117,85 @@ function renderHistory(dateFilter = 'all') {
         list.appendChild(el);
     });
 
+    list.scrollTop = list.scrollHeight;
+}
+
+function renderBarHistory(dateFilter = 'all') {
+    const list = document.getElementById('bar-history-list');
+    const selectWrapper = document.getElementById('history-date-filter');
+    const selectSelected = selectWrapper.querySelector('.select-selected');
+    const selectOptions = selectWrapper.querySelector('.select-options');
+    if (!list) return;
+    const history = [
+        ...getConversationHistory().filter(m => (m.scene || '') === 'bar'),
+        ...getBarConversationHistory()
+    ].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
+    const dates = [...new Set(history.map(m => {
+        const d = new Date(m.ts || 0);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }))].sort().reverse();
+
+    selectOptions.innerHTML = '';
+    const allOpt = document.createElement('div');
+    allOpt.className = 'select-option' + (dateFilter === 'all' ? ' selected' : '');
+    allOpt.textContent = '全部日期';
+    allOpt.dataset.value = 'all';
+    allOpt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectSelected.textContent = '全部日期';
+        selectOptions.classList.add('hidden');
+        renderBarHistory('all');
+    });
+    selectOptions.appendChild(allOpt);
+
+    dates.forEach(d => {
+        const opt = document.createElement('div');
+        opt.className = 'select-option' + (d === dateFilter ? ' selected' : '');
+        opt.textContent = d;
+        opt.dataset.value = d;
+        opt.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectSelected.textContent = d;
+            selectOptions.classList.add('hidden');
+            renderBarHistory(d);
+        });
+        selectOptions.appendChild(opt);
+    });
+    selectSelected.textContent = dateFilter === 'all' ? '全部日期' : dateFilter;
+
+    const filtered = dateFilter === 'all'
+        ? history
+        : history.filter(m => {
+            const d = new Date(m.ts || 0);
+            const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            return ds === dateFilter;
+        });
+
+    list.innerHTML = '';
+    if (filtered.length === 0) {
+        list.innerHTML = '<div style="text-align:center;color:rgba(90,62,74,0.56);padding:20px;">暂无暖调闲聚对话</div>';
+        return;
+    }
+
+    let lastDate = '';
+    filtered.forEach(m => {
+        const d = new Date(m.ts || 0);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (dateStr !== lastDate) {
+            const sep = document.createElement('div');
+            sep.className = 'history-date-sep';
+            sep.textContent = dateStr;
+            list.appendChild(sep);
+            lastDate = dateStr;
+        }
+        const el = document.createElement('div');
+        el.className = `history-msg ${m.role}`;
+        const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        const speaker = m.role === 'user' ? '你' : (m.characterName || '芙提雅');
+        el.innerHTML = `<div class="msg-role">${speaker} · 暖调闲聚 · ${time}</div><div>${m.content}</div>`;
+        list.appendChild(el);
+    });
     list.scrollTop = list.scrollHeight;
 }
 
@@ -2095,10 +2298,11 @@ function renderDateHistory(dateFilter = 'all') {
     });
 }
 
-function exportData() {
+function buildExportPayloadV3(options = {}) {
     const gameState = exportGameState();
-    const data = {
-        version: 2,
+    return {
+        version: 3,
+        archiveType: 'fritia-online-next-zip',
         exportedAt: Date.now(),
         exportedGameTime: gameState.gameTime,
         gameState,
@@ -2110,8 +2314,35 @@ function exportData() {
         dreamFurniture: exportDreamFurniture(),
         settings: JSON.parse(localStorage.getItem('fritia-settings') || '{}'),
         conversations: getConversationHistory(),
-        dateConversations: getDateConversationHistory()
+        dateConversations: getDateConversationHistory(),
+        barConversations: getBarConversationHistory(),
+        barGuestBuiltinState: exportBarGuestBuiltinState(),
+        barGuestCards: options.barGuestCards || exportBarGuestCards()
     };
+}
+
+async function exportDataZip() {
+    const assets = await exportBarGuestAssets();
+    const assetPaths = new Set(assets.map(asset => asset.path));
+    const data = buildExportPayloadV3({
+        barGuestCards: exportBarGuestCardsByPaths(assetPaths)
+    });
+    const entries = [{ path: 'save.json', data: JSON.stringify(data, null, 2) }];
+    for (const asset of assets) entries.push({ path: asset.path, data: asset.blob });
+    const blob = await createZip(entries);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    a.href = url;
+    a.download = `fritia_backup_${dateStr}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function exportData() {
+    const data = buildExportPayloadV3();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2126,6 +2357,66 @@ function exportData() {
 
 function importData() {
     document.getElementById('import-file').click();
+}
+
+async function applyImportedDataV3(data, assetFiles = new Map()) {
+    if (data.settings) {
+        localStorage.setItem('fritia-settings', JSON.stringify(data.settings));
+    }
+    if (data.conversations && Array.isArray(data.conversations)) {
+        importConversationHistory(data.conversations);
+    }
+    if (data.dateConversations && typeof data.dateConversations === 'object') {
+        importDateConversationHistory(data.dateConversations);
+    }
+    if (data.barConversations && Array.isArray(data.barConversations)) {
+        importBarConversationHistory(data.barConversations);
+    }
+
+    const guestAssets = [];
+    for (const card of data.barGuestCards || []) {
+        const modelBlob = assetFiles.get(card.modelPath);
+        const promptBlob = assetFiles.get(card.promptPath);
+        if (modelBlob) guestAssets.push({ path: card.modelPath, blob: modelBlob });
+        if (promptBlob) guestAssets.push({ path: card.promptPath, blob: promptBlob });
+        for (const path of card.assetPaths || []) {
+            const assetBlob = assetFiles.get(path);
+            if (assetBlob) guestAssets.push({ path, blob: assetBlob });
+        }
+    }
+    const guestImport = await importBarGuestCards(data.barGuestCards || [], guestAssets);
+    importBarGuestBuiltinState(data.barGuestBuiltinState);
+    const importResult = importGameState(data, { suppressEvent: true });
+    const dreamImport = importDreamFurniture(data.dreamFurniture || data.gameState?.dreamFurniture || []);
+    importAchievements(data.achievements);
+    refreshAchievementsFromImport();
+    refreshDreamFurnitureAfterImport();
+    updateGameHud(true);
+    renderGiftCollection();
+    return { importResult, dreamImport, guestImport };
+}
+
+async function handleImportFileV2(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+        let data;
+        let assetFiles = new Map();
+        if (file.name.toLowerCase().endsWith('.zip')) {
+            assetFiles = await readZip(file);
+            const jsonText = await readZipText(assetFiles, 'save.json');
+            data = JSON.parse(jsonText);
+        } else {
+            data = JSON.parse(await file.text());
+        }
+        const { importResult, dreamImport, guestImport } = await applyImportedDataV3(data, assetFiles);
+        alert(`导入成功！礼物新增 ${importResult.giftsAdded || 0} 条，造梦家具新增 ${dreamImport.added || 0} 件，访客角色导入 ${guestImport.imported || 0} 个。刷新页面以应用设置。`);
+    } catch (err) {
+        alert('导入失败：文件格式不正确或资源缺失');
+        console.error('Import error:', err);
+    } finally {
+        e.target.value = '';
+    }
 }
 
 function handleImportFile(e) {

@@ -302,6 +302,7 @@ function playLoadedDance() {
     clearDanceCoordinate();
     restoreDancePoseSnapshot();
     removeHelperObject();
+    state.options.onDanceStart?.(DANCE_STAGE_POSE);
     state.options.placeCharacterAtStage?.(DANCE_STAGE_POSE);
     captureDanceScale(cd);
     captureDancePoseSnapshot(cd);

@@ -220,14 +220,23 @@ function forceUpdate(cd) {
 }
 
 export function loadCharacter(scene, waypoints, colliders, onProgress) {
+    return loadCharacterFromModel(scene, MODEL_PATH, waypoints, colliders, onProgress, {
+        meshName: 'FritiaPMX',
+        displayName: '芙提雅'
+    });
+}
+
+export function loadCharacterFromModel(scene, modelPath, waypoints, colliders, onProgress, options = {}) {
     return new Promise((resolve, reject) => {
         if (onProgress) onProgress(10);
-        const loader = new MMDLoader();
+        const loader = options.loadingManager
+            ? new MMDLoader(options.loadingManager)
+            : new MMDLoader();
         loader.load(
-            MODEL_PATH,
+            modelPath || MODEL_PATH,
             (mesh) => {
                 try {
-                    mesh.name = 'FritiaPMX';
+                    mesh.name = options.meshName || 'FritiaPMX';
                     mesh.castShadow = true;
                     mesh.receiveShadow = true;
 
@@ -317,6 +326,8 @@ export function loadCharacter(scene, waypoints, colliders, onProgress) {
 
                     const charData = {
                         root: mesh, mesh, skeleton, bones, boneRef,
+                        displayName: options.displayName || '芙提雅',
+                        modelPath: modelPath || MODEL_PATH,
                         initialPositions, colliders: colliders || [],
                         navigationScope: { roomId: 'bedroom' },
                         state: STATES.IDLE,

@@ -126,6 +126,58 @@
         </div>
     </div>
 
+    <div id="bar-guest-panel" class="ui-overlay hidden">
+        <div class="otome-panel otome-panel--xl bar-guest-shell">
+            <div class="otome-panel__head bar-guest-head">
+                <div class="otome-panel__icon"><img src="src/_ui/icon_history.svg" alt=""></div>
+                <div class="otome-panel__titles">
+                    <span class="otome-panel__kicker">WARM GATHERING INVITE</span>
+                    <h2 class="otome-panel__title">发起邀请</h2>
+                    <p class="otome-panel__sub">选择内置角色，或导入 PMX 与人格设定文档，让新的伙伴临时入场。</p>
+                </div>
+                <button id="bar-guest-close" class="otome-panel__close" aria-label="关闭邀请">
+                    <img src="src/_ui/icon_close.svg" alt="">
+                </button>
+            </div>
+            <div class="otome-panel__body bar-guest-body">
+                <section class="bar-guest-roster" aria-label="候选角色">
+                    <div class="otome-section-label">候选角色</div>
+                    <div id="bar-guest-card-list" class="bar-guest-card-list"></div>
+                </section>
+                <section class="bar-guest-forge" aria-label="自定义角色">
+                    <div class="bar-guest-preview-wrap">
+                        <div id="bar-guest-preview" class="bar-guest-preview"><span>PMX</span></div>
+                        <div>
+                            <div class="otome-section-label">新角色配置</div>
+                            <p class="bar-guest-copy">模型与人格文档只保存在本地浏览器；保存后会加入候选列表。</p>
+                        </div>
+                    </div>
+                    <input type="file" id="bar-guest-pmx-file" accept=".pmx,image/*,.spa,.sph,.toon,.bmp" multiple hidden>
+                    <input type="file" id="bar-guest-prompt-file" accept=".txt,.md,text/plain" hidden>
+                    <label class="otome-field-label" for="bar-guest-name">角色名称</label>
+                    <input id="bar-guest-name" type="text" maxlength="24" placeholder="输入角色名称">
+                    <div class="bar-guest-file-grid">
+                        <button id="bar-guest-pmx-pick" class="bar-guest-file-card" type="button">
+                            <span class="dance-file-card__kicker">PMX MODEL</span>
+                            <span class="dance-file-card__title">导入 PMX 与贴图</span>
+                            <span id="bar-guest-pmx-name" class="dance-file-card__meta">未选择 PMX</span>
+                        </button>
+                        <button id="bar-guest-prompt-pick" class="bar-guest-file-card" type="button">
+                            <span class="dance-file-card__kicker">PERSONA FILE</span>
+                            <span class="dance-file-card__title">导入人格文档</span>
+                            <span id="bar-guest-prompt-name" class="dance-file-card__meta">未选择人格文档</span>
+                        </button>
+                    </div>
+                    <div id="bar-guest-status" class="dance-status" data-tone="info" aria-live="polite">选择候选角色后可以直接邀请。</div>
+                </section>
+            </div>
+            <div class="otome-panel__foot bar-guest-foot">
+                <button id="bar-guest-save" class="btn btn--ghost" type="button">保存自定义角色</button>
+                <button id="bar-guest-invite" class="btn btn--primary" type="button">邀请入场</button>
+            </div>
+        </div>
+    </div>
+
     <div id="touch-controls">
         <div class="touch-joystick" id="joystick-move">
             <div class="joystick-knob" id="joystick-move-knob"></div>
@@ -249,7 +301,7 @@
             </svg>
         </div>
     </div>
-    <input type="file" id="import-file" accept=".json" style="display:none">
+    <input type="file" id="import-file" accept=".zip,.json,application/zip,application/json" style="display:none">
 
     <div id="achievements-panel" class="ui-overlay hidden">
         <div class="otome-panel otome-panel--xl achievements-shell">
@@ -322,6 +374,7 @@
             <div class="history-toolbar">
                 <div class="history-tabs">
                     <button class="history-tab active" data-tab="daily">日常对话</button>
+                    <button class="history-tab" data-tab="bar">暖调闲聚</button>
                     <button class="history-tab" data-tab="date">约会行程</button>
                 </div>
                 <div class="custom-select" id="history-date-filter">
@@ -331,6 +384,7 @@
             </div>
             <div class="otome-panel__body otome-panel__body--flush history-body">
                 <div id="history-list"></div>
+                <div id="bar-history-list" class="hidden"></div>
                 <div id="date-history-list" class="hidden"></div>
             </div>
         </div>

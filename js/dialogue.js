@@ -8,6 +8,12 @@ let conversationHistory = [];
 let isGenerating = false;
 let abortController = null;
 let systemPrompt = '';
+let dialogueContext = {
+    scene: 'daily',
+    characterId: 'fritia',
+    characterName: '芙提雅',
+    prompt: ''
+};
 
 const elements = {};
 
@@ -51,6 +57,7 @@ function getContextMessages() {
     
     for (let i = conversationHistory.length - 1; i >= 0; i--) {
         const msg = conversationHistory[i];
+        if ((msg.scene || 'daily') !== dialogueContext.scene) continue;
         const msgTokens = estimateTokens(msg.content) + 10;
         
         if (totalTokens + msgTokens > availableTokens) break;
@@ -64,7 +71,11 @@ function getContextMessages() {
 
 function buildSystemPrompt() {
     const furnitureContext = getDreamFurnitureDialogueContext();
-    return `${systemPrompt}\n\n${getGameTimeContext()}${furnitureContext ? `\n\n${furnitureContext}` : ''}`;
+    const basePrompt = dialogueContext.prompt || systemPrompt;
+    const sceneContext = dialogueContext.scene === 'bar'
+        ? '\n\n当前地点是“暖调闲聚”酒吧地图。本轮对话属于暖调闲聚场景。'
+        : '';
+    return `${basePrompt}\n\n${getGameTimeContext()}${sceneContext}${furnitureContext ? `\n\n${furnitureContext}` : ''}`;
 }
 
 function loadHistory() {
@@ -97,6 +108,15 @@ export function importConversationHistory(data) {
         conversationHistory = data;
         saveHistory();
     }
+}
+
+export function setDialogueSceneContext(context = {}) {
+    dialogueContext = {
+        scene: context.scene === 'bar' ? 'bar' : 'daily',
+        characterId: context.characterId || 'fritia',
+        characterName: context.characterName || '芙提雅',
+        prompt: context.prompt || ''
+    };
 }
 
 export async function initDialogue() {
@@ -132,7 +152,14 @@ async function handleSend() {
     }
 
     elements.inputEl.value = '';
-    const userMsg = { role: 'user', content: msg, ts: getTimestamp() };
+    const userMsg = {
+        role: 'user',
+        content: msg,
+        ts: getTimestamp(),
+        scene: dialogueContext.scene,
+        characterId: dialogueContext.characterId,
+        characterName: dialogueContext.characterName
+    };
     conversationHistory.push(userMsg);
     saveHistory();
     appendUserMessage(msg);
@@ -200,12 +227,19 @@ async function handleSend() {
             }
         }
 
-        const assistantMsg = { role: 'assistant', content: fullText, ts: getTimestamp() };
+        const assistantMsg = {
+            role: 'assistant',
+            content: fullText,
+            ts: getTimestamp(),
+            scene: dialogueContext.scene,
+            characterId: dialogueContext.characterId,
+            characterName: dialogueContext.characterName
+        };
         conversationHistory.push(assistantMsg);
         saveHistory();
         if (fullText.trim()) {
             addAffinity(1);
-            recordDialogueInteraction('daily', fullText);
+            recordDialogueInteraction(dialogueContext.scene === 'bar' ? 'bar' : 'daily', fullText);
         }
 
     } catch (err) {
@@ -319,6 +353,9 @@ function scrollDialogue() {
 
 export function showDialogue() {
     elements.ui.classList.remove('hidden');
+    elements.ui.classList.toggle('bar-fritia-dialogue', dialogueContext.scene === 'bar');
+    const namePlate = document.getElementById('dialogue-name');
+    if (namePlate) namePlate.textContent = dialogueContext.characterName || '芙提雅';
     elements.textEl.innerHTML = '';
 
     const greetings = [
@@ -347,6 +384,7 @@ export function showDialogue() {
 
 export function hideDialogue() {
     elements.ui.classList.add('hidden');
+    elements.ui.classList.remove('bar-fritia-dialogue');
     if (abortController) {
         abortController.abort();
         abortController = null;

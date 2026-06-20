@@ -388,8 +388,8 @@ function getProgressValue(achievement) {
 
 function getConversationProgress() {
     const stats = getStats();
-    const statUser = stats.dailyUserMessages + stats.dateUserMessages;
-    const statBot = stats.dailyBotMessages + stats.dateBotMessages;
+    const statUser = stats.dailyUserMessages + stats.dateUserMessages + (stats.barUserMessages || 0);
+    const statBot = stats.dailyBotMessages + stats.dateBotMessages + (stats.barBotMessages || 0);
     const historyUser = getConversationHistory().filter(msg => msg.role === 'user').length;
     const historyBot = getConversationHistory().filter(msg => msg.role === 'assistant').length;
     const dateHistory = getDateConversationHistory();

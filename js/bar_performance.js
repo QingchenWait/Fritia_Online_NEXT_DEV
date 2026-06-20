@@ -8,6 +8,7 @@ const _queryMax = { x: 0, z: 0 };
 const _rayCenter = new THREE.Vector2(0, 0);
 const _exitHits = [];
 const _danceHits = [];
+const _inviteHits = [];
 
 function colliderKey(ix, iz) {
     return `${ix},${iz}`;
@@ -102,18 +103,20 @@ export function createBarInteractionProbe(options = {}) {
     let lastTime = -Infinity;
     let lastExit = false;
     let lastDance = false;
+    let lastInvite = false;
 
-    return function probeBarInteractions({ active, camera, raycaster, exitMesh, danceMesh, force = false }) {
+    return function probeBarInteractions({ active, camera, raycaster, exitMesh, danceMesh, inviteMesh, force = false }) {
         if (!active || !camera || !raycaster) {
             lastExit = false;
             lastDance = false;
-            return { exit: false, dance: false };
+            lastInvite = false;
+            return { exit: false, dance: false, invite: false };
         }
 
         const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
         const interval = Number.isFinite(options.intervalMs) ? options.intervalMs : BAR_INTERACTION_INTERVAL_MS;
         if (!force && now - lastTime < interval) {
-            return { exit: lastExit, dance: lastDance };
+            return { exit: lastExit, dance: lastDance, invite: lastInvite };
         }
         lastTime = now;
 
@@ -132,9 +135,16 @@ export function createBarInteractionProbe(options = {}) {
             raycaster.intersectObject(danceMesh, true, _danceHits);
         }
 
+        _inviteHits.length = 0;
+        if (inviteMesh) {
+            raycaster.far = 60;
+            raycaster.intersectObject(inviteMesh, true, _inviteHits);
+        }
+
         raycaster.far = oldFar;
         lastExit = _exitHits.length > 0;
         lastDance = _danceHits.length > 0;
-        return { exit: lastExit, dance: lastDance };
+        lastInvite = _inviteHits.length > 0;
+        return { exit: lastExit, dance: lastDance, invite: lastInvite };
     };
 }
