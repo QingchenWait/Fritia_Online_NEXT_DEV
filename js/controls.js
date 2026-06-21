@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { getBarCollisionCandidates } from './bar_performance.js';
+import { getSettings } from './settings.js';
 
 function isTouchDevice() {
     return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -32,6 +33,12 @@ const PLAYER_EYE_HEIGHT = 1.6;
 const PLAYER_FOOT_CLEARANCE = 0.04;
 const CAMERA_HEIGHT_SMOOTH_SPEED = 12;
 
+function clampSensitivity(value) {
+    const next = Number(value);
+    if (!Number.isFinite(next)) return 1;
+    return Math.min(2.5, Math.max(0.35, next));
+}
+
 function nowMs() {
     return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
 }
@@ -62,6 +69,9 @@ export function initControls(camera, domElement, colliders) {
     const pointerLockSupported = supportsPointerLock(domElement);
     const controls = new PointerLockControls(camera, domElement);
     const lookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    const initialSettings = getSettings();
+    let mouseSensitivity = clampSensitivity(initialSettings.mouseSensitivity);
+    let touchSensitivity = clampSensitivity(initialSettings.touchSensitivity);
 
     const state = {
         moveForward: false,
@@ -103,6 +113,12 @@ export function initControls(camera, domElement, colliders) {
     let suppressPointerLookUntil = 0;
     let resetTouchInputState = () => {};
 
+    document.addEventListener('fritia-settings-updated', (event) => {
+        const next = event.detail || getSettings();
+        mouseSensitivity = clampSensitivity(next.mouseSensitivity);
+        touchSensitivity = clampSensitivity(next.touchSensitivity);
+    });
+
     function suppressPointerLook(ms = POINTER_LOCK_SUPPRESS_MS) {
         suppressPointerLookUntil = Math.max(suppressPointerLookUntil, nowMs() + ms);
     }
@@ -118,7 +134,7 @@ export function initControls(camera, domElement, colliders) {
         if (nowMs() < suppressPointerLookUntil) return;
         const normalized = normalizeLookDelta(dx, dy, POINTER_LOCK_MAX_LOOK_STEP, POINTER_LOCK_HARD_SPIKE);
         if (normalized) {
-            applyLookDelta(normalized.x, normalized.y, 0.002);
+            applyLookDelta(normalized.x, normalized.y, 0.002 * mouseSensitivity);
         }
     }
 
@@ -255,7 +271,7 @@ export function initControls(camera, domElement, colliders) {
 
     if (state.useTouchControls) {
         const resetJoystick = initTouchJoystick(state);
-        const resetLook = initTouchLook(controls, state, rotateView);
+        const resetLook = initTouchLook(controls, state, rotateView, () => touchSensitivity);
         resetTouchInputState = () => {
             resetJoystick?.();
             resetLook?.();
@@ -459,7 +475,7 @@ export function initControls(camera, domElement, colliders) {
         if (state.lookLocked) return false;
         const normalized = normalizeLookDelta(deltaX, deltaY, MANUAL_LOOK_MAX_STEP, MANUAL_LOOK_HARD_SPIKE);
         if (!normalized) return false;
-        applyLookDelta(normalized.x, normalized.y, 0.002);
+        applyLookDelta(normalized.x, normalized.y, 0.002 * mouseSensitivity);
         return true;
     }
 
@@ -665,7 +681,7 @@ function initTouchJoystick(state) {
     return resetJoystick;
 }
 
-function initTouchLook(controls, state, rotateView) {
+function initTouchLook(controls, state, rotateView, getTouchSensitivityValue = () => 1) {
     const canvas = document.getElementById('game-canvas');
     if (!canvas) return () => {};
 
@@ -711,7 +727,8 @@ function initTouchLook(controls, state, rotateView) {
 
                 const normalized = normalizeLookDelta(dx, dy, TOUCH_LOOK_MAX_STEP, TOUCH_LOOK_HARD_SPIKE);
                 if (!normalized) break;
-                rotateView?.(normalized.x * 1.5, normalized.y * 1.5);
+                const sensitivity = clampSensitivity(getTouchSensitivityValue());
+                rotateView?.(normalized.x * 1.5 * sensitivity, normalized.y * 1.5 * sensitivity);
                 break;
             }
         }

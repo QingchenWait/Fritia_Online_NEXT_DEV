@@ -2,6 +2,10 @@ import { getSettings } from './settings.js';
 import { addAffinity, getGameTimeContext, recordDialogueInteraction } from './game_state.js';
 import { getDreamFurnitureDialogueContext } from './dream_system.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
+import {
+    buildDeepSeekIntimateUserMessage,
+    shouldKeepMessageForCurrentDeepSeekMode
+} from './deepseek_intimate_mode.js';
 
 const HISTORY_KEY = 'fritia_chat_history';
 
@@ -48,7 +52,7 @@ function estimateTokens(text) {
     return tokens;
 }
 
-function getContextMessages() {
+function getContextMessages(settings = getSettings()) {
     const systemTokens = estimateTokens(systemPrompt);
     const maxTokens = 8000;
     const availableTokens = maxTokens - systemTokens - 200;
@@ -59,6 +63,7 @@ function getContextMessages() {
     for (let i = conversationHistory.length - 1; i >= 0; i--) {
         const msg = conversationHistory[i];
         if ((msg.scene || 'daily') !== dialogueContext.scene) continue;
+        if (!shouldKeepMessageForCurrentDeepSeekMode(msg, settings, ['assistant'])) continue;
         const msgTokens = estimateTokens(msg.content) + 10;
         
         if (totalTokens + msgTokens > availableTokens) break;
@@ -170,7 +175,7 @@ async function handleSend() {
 
     try {
         abortController = new AbortController();
-        const contextMessages = getContextMessages();
+        const contextMessages = getContextMessages(settings);
         const ragMessage = dialogueContext.scene === 'daily'
             ? await buildRagReferenceMessage({
                 mode: 'daily',
@@ -178,9 +183,13 @@ async function handleSend() {
                 recentMessages: contextMessages
             })
             : null;
+        const intimateMessage = dialogueContext.scene === 'daily'
+            ? await buildDeepSeekIntimateUserMessage(settings)
+            : null;
         const messages = [
             { role: 'system', content: buildSystemPrompt() },
             ...(ragMessage ? [ragMessage] : []),
+            ...(intimateMessage ? [intimateMessage] : []),
             ...contextMessages
         ];
 
@@ -245,7 +254,8 @@ async function handleSend() {
             ts: getTimestamp(),
             scene: dialogueContext.scene,
             characterId: dialogueContext.characterId,
-            characterName: dialogueContext.characterName
+            characterName: dialogueContext.characterName,
+            deepseekIntimateMode: Boolean(intimateMessage)
         };
         conversationHistory.push(assistantMsg);
         saveHistory();

@@ -1,6 +1,10 @@
 import { getSettings } from './settings.js';
 import { getGameTimeContext, recordDialogueInteraction } from './game_state.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
+import {
+    buildDeepSeekIntimateUserMessage,
+    shouldKeepMessageForCurrentDeepSeekMode
+} from './deepseek_intimate_mode.js';
 
 const STORAGE_KEY = 'fritia_roundtable_whispers';
 const MESSAGE_TTL_MS = 5 * 24 * 60 * 60 * 1000;
@@ -452,6 +456,26 @@ function summarizeMessages(messages = []) {
     return lines.join(' / ').slice(-300);
 }
 
+function getRoundtableRequestMessages(settings = getSettings()) {
+    return state.messages.filter(item => (
+        item
+        && item.role !== 'system'
+        && shouldKeepMessageForCurrentDeepSeekMode(item, settings, ['bot'])
+    ));
+}
+
+function getRoundtableRequestTopicSummary(settings = getSettings()) {
+    const filtered = state.messages.some(item => (
+        item
+        && item.role !== 'system'
+        && !shouldKeepMessageForCurrentDeepSeekMode(item, settings, ['bot'])
+    ));
+    if (!filtered) {
+        return state.topicSummary;
+    }
+    return summarizeMessages(getRoundtableRequestMessages(settings));
+}
+
 function persistCurrentSessionToFull() {
     if (state.sessionMode !== 'fresh' || !state.freshSessionDirty) return;
     const before = state.fullMessages.length;
@@ -544,7 +568,8 @@ function normalizeStoredMessage(item) {
         intent: ALLOWED_INTENTS.has(item.intent) ? item.intent : 'react',
         emotion: ALLOWED_EMOTIONS.has(item.emotion) ? item.emotion : 'neutral',
         ts: Number(item.ts) || nowMs(),
-        fallback: Boolean(item.fallback)
+        fallback: Boolean(item.fallback),
+        deepseekIntimateMode: item.deepseekIntimateMode === true
     };
 }
 
@@ -1424,11 +1449,14 @@ async function processNextEvent() {
     const requestToken = state.requestToken;
     renderStatus();
 
+    let intimateMessage = null;
     try {
         const settings = getSettings();
-        const ragMessage = await buildRoundtableRagMessage(event);
+        const ragMessage = await buildRoundtableRagMessage(event, settings);
         if (requestToken !== state.requestToken || !isActiveSession()) return;
-        const estimatedTokens = estimateRequestTokens(speaker, event, ragMessage);
+        intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
+        if (requestToken !== state.requestToken || !isActiveSession()) return;
+        const estimatedTokens = estimateRequestTokens(speaker, event, ragMessage, intimateMessage, settings);
         const budgetBeforeRequest = getBudgetState();
         if (budgetBeforeRequest.tokenTotal + estimatedTokens >= TOKEN_HARD_LIMIT_10M) {
             logRoundtableBlock('token-hard-limit-before-request', {
@@ -1466,6 +1494,7 @@ async function processNextEvent() {
             speaker,
             event,
             ragMessage,
+            intimateMessage,
             signal: state.abortController.signal
         });
         if (requestToken !== state.requestToken || !isActiveSession()) return;
@@ -1484,7 +1513,8 @@ async function processNextEvent() {
             intent: payload.intent,
             emotion: payload.emotion,
             fallback: payload.fallback,
-            topicHint: payload.topicHint
+            topicHint: payload.topicHint,
+            deepseekIntimateMode: Boolean(intimateMessage)
         });
         updateSpeakerStats(speaker.id);
         if (message?.text) recordDialogueInteraction('bar', message.text);
@@ -1500,7 +1530,7 @@ async function processNextEvent() {
     } catch (err) {
         if (err?.name === 'AbortError') return;
         if (requestToken !== state.requestToken || !isActiveSession()) return;
-        handleRequestError(err, speaker, event);
+        handleRequestError(err, speaker, event, intimateMessage);
     } finally {
         if (requestToken === state.requestToken) {
             state.processing = false;
@@ -1616,19 +1646,19 @@ function recordCall(type, tokens = 0) {
     getBudgetState();
 }
 
-function estimateRequestTokens(speaker, event, ragMessage = null) {
-    const recentMessages = state.messages
-        .filter(item => item.role !== 'system')
+function estimateRequestTokens(speaker, event, ragMessage = null, intimateMessage = null, settings = getSettings()) {
+    const recentMessages = getRoundtableRequestMessages(settings)
         .slice(-10)
         .map(item => `${item.speakerName}:${item.text}`)
         .join('\n');
     return estimateTokens([
         speaker?.prompt || '',
-        state.topicSummary,
+        getRoundtableRequestTopicSummary(settings),
         event?.text || '',
         event?.sourceText || '',
         recentMessages,
         ragMessage?.content || '',
+        intimateMessage?.content || '',
         getGameTimeContext(),
         'roundtable-json-contract-static-overhead'
     ].join('\n')) + 1200;
@@ -1830,7 +1860,7 @@ function handlePostBotEvent(event, speaker, payload) {
     });
 }
 
-function handleRequestError(err, speaker, event) {
+function handleRequestError(err, speaker, event, intimateMessage = null) {
     const message = String(err?.message || '');
     const isRateLimit = err?.status === 429 || /429|rate limit|too many requests/i.test(message);
     if (isRateLimit) {
@@ -1854,7 +1884,8 @@ function handleRequestError(err, speaker, event) {
         targetId: replyTarget.id,
         intent: fallbackKind === 'handoff' ? HANDOFF_INTENT : 'react',
         emotion: 'shy',
-        fallback: true
+        fallback: true,
+        deepseekIntimateMode: Boolean(intimateMessage)
     });
     if (event.type === 'handoff') {
         enterPlayerFloorLock('handoff-api-fallback', {
@@ -1877,7 +1908,7 @@ function handleRequestError(err, speaker, event) {
     }, err);
 }
 
-async function requestRoundtableCompletion({ settings, speaker, event, ragMessage = null, signal }) {
+async function requestRoundtableCompletion({ settings, speaker, event, ragMessage = null, intimateMessage = null, signal }) {
     const baseUrl = normalizeBaseUrl(settings.baseUrl);
     const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
@@ -1885,7 +1916,7 @@ async function requestRoundtableCompletion({ settings, speaker, event, ragMessag
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${settings.apiKey}`
         },
-        body: JSON.stringify(buildRequestBody(settings, speaker, event, ragMessage)),
+        body: JSON.stringify(buildRequestBody(settings, speaker, event, ragMessage, intimateMessage)),
         signal
     });
 
@@ -1907,12 +1938,11 @@ async function requestRoundtableCompletion({ settings, speaker, event, ragMessag
     return readCompletionStream(response);
 }
 
-async function buildRoundtableRagMessage(event) {
-    const recentMessages = state.messages
-        .filter(item => item.role !== 'system')
+async function buildRoundtableRagMessage(event, settings = getSettings()) {
+    const recentMessages = getRoundtableRequestMessages(settings)
         .slice(-8)
         .map(item => `${item.speakerName}：${item.text}`);
-    const query = [event?.text || '', event?.sourceText || '', state.topicSummary].filter(Boolean).join('\n');
+    const query = [event?.text || '', event?.sourceText || '', getRoundtableRequestTopicSummary(settings)].filter(Boolean).join('\n');
     return buildRagReferenceMessage({
         mode: 'roundtable',
         query,
@@ -1921,7 +1951,7 @@ async function buildRoundtableRagMessage(event) {
     });
 }
 
-function buildRequestBody(settings, speaker, event, ragMessage = null) {
+function buildRequestBody(settings, speaker, event, ragMessage = null, intimateMessage = null) {
     const participants = getActiveParticipants();
     const others = participants
         .filter(item => item.id !== speaker.id)
@@ -1929,8 +1959,9 @@ function buildRequestBody(settings, speaker, event, ragMessage = null) {
         .join('、') || '暂无';
     const budget = getBudgetState();
     const recentCount = budget.softLimited ? 6 : 10;
-    const recentMessages = state.messages
-        .filter(item => item.role !== 'system')
+    const requestMessages = getRoundtableRequestMessages(settings);
+    const requestTopicSummary = getRoundtableRequestTopicSummary(settings);
+    const recentMessages = requestMessages
         .slice(-recentCount)
         .map(item => ({
             speakerId: item.speakerId,
@@ -1951,7 +1982,7 @@ function buildRequestBody(settings, speaker, event, ragMessage = null) {
         botChainLimit: getBotChainLimit(),
         earliestHandoffDebt: getEarliestModelHandoffDebt(),
         playerFloorLock: state.playerFloorLock,
-        topicSummary: state.topicSummary,
+        topicSummary: requestTopicSummary,
         participants: participants.map(item => ({ id: item.id, name: item.name })),
         recentMessages
     };
@@ -1984,6 +2015,7 @@ function buildRequestBody(settings, speaker, event, ragMessage = null) {
                 ].join('\n')
             },
             ...(ragMessage ? [ragMessage] : []),
+            ...(intimateMessage ? [intimateMessage] : []),
             {
                 role: 'user',
                 content: [

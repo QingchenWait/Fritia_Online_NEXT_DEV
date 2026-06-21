@@ -8,8 +8,8 @@
     <link rel="stylesheet" href="css/base.css?v=20260621-loading-size">
     <link rel="stylesheet" href="css/components.css?v=20260619-otome">
     <link rel="stylesheet" href="css/effects.css?v=20260619-otome">
-    <link rel="stylesheet" href="css/panels.css?v=20260621-bartending-custom-input">
-    <link rel="stylesheet" href="css/responsive.css?v=20260621-bartending-head">
+    <link rel="stylesheet" href="css/panels.css?v=20260622-settings-scroll">
+    <link rel="stylesheet" href="css/responsive.css?v=20260622-settings-scroll">
     <script type="importmap">
     {
         "imports": {
@@ -560,7 +560,7 @@
                 <div class="otome-panel__titles">
                     <span class="otome-panel__kicker">SYSTEM CONSOLE</span>
                     <h2 class="otome-panel__title">系统设置</h2>
-                    <p class="otome-panel__sub">对话模型与本地资料库。所有配置仅保存在当前浏览器。</p>
+                    <p id="settings-subtitle" class="otome-panel__sub">配置对话模型连接，所有密钥只保存在当前浏览器。</p>
                 </div>
                 <button id="settings-close" class="otome-panel__close" aria-label="关闭设置">
                     <img src="src/_ui/icon_close.svg" alt="">
@@ -572,6 +572,10 @@
                         <span class="settings-nav-item__icon">LLM</span>
                         <span>大模型设置</span>
                     </button>
+                    <button class="settings-nav-item" type="button" data-settings-section="controls">
+                        <span class="settings-nav-item__icon">CTRL</span>
+                        <span>操作设置</span>
+                    </button>
                     <button class="settings-nav-item" type="button" data-settings-section="knowledge">
                         <span class="settings-nav-item__icon">RAG</span>
                         <span>知识库</span>
@@ -581,8 +585,8 @@
                 <section class="settings-view active" data-settings-view="model" aria-label="大模型设置">
                     <button class="settings-back-btn btn btn--ghost" type="button" data-settings-back>返回设置分组</button>
                     <div class="settings-view-head">
-                        <span class="otome-section-label">对话模型连接</span>
-                        <p>日常对话、约会、圆桌密语、造梦家具等玩法复用同一组 OpenAI 兼容 chat/completions 配置。</p>
+                        <span class="otome-section-label">大模型连接</span>
+                        <p>游戏大部分玩法由大模型驱动，需自行获取 API 并在这里填写。使用 OpenAI chat/completions 兼容格式。</p>
                     </div>
                     <div class="settings-form-grid">
                         <div class="otome-field">
@@ -598,9 +602,60 @@
                             <input type="text" id="model-name" placeholder="gpt-4o-mini">
                         </div>
                     </div>
-                    <div class="settings-note-card">
-                        <strong>知识库不需要 embedding 配置</strong>
-                        <span>本地 RAG 只使用浏览器 IndexedDB 与 BM25 / 关键词倒排索引，不会调用额外模型。</span>
+                    <div class="settings-api-card">
+                        <div>
+                            <strong>主流模型 API 获取</strong>
+                            <span>点击按钮进入官网获取 API，并将 API Key、Base URL 与模型名称填入上方文本框。</span>
+                        </div>
+                        <div class="settings-api-links" aria-label="主流模型 API 获取">
+                            <a class="settings-api-link" href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">DeepSeek</a>
+                            <a class="settings-api-link" href="https://platform.xiaomimimo.com/console/api-keys" target="_blank" rel="noopener noreferrer">MiMO</a>
+                            <a class="settings-api-link" href="https://bailian.console.aliyun.com/?tab=model#/api-key" target="_blank" rel="noopener noreferrer">Qwen(千问)</a>
+                            <a class="settings-api-link" href="https://platform.kimi.com/console/api-keys" target="_blank" rel="noopener noreferrer">Kimi</a>
+                            <a class="settings-api-link" href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">Gemini</a>
+                        </div>
+                    </div>
+                    <label id="deepseek-intimate-mode-card" class="settings-intimate-card hidden" for="deepseek-intimate-mode">
+                        <input id="deepseek-intimate-mode" type="checkbox">
+                        <span class="settings-intimate-switch" aria-hidden="true"></span>
+                        <span>
+                            <strong>亲密模式</strong>
+                            <small>当使用 DeepSeek 模型、Localization 为 1 时，在各种对话场景中追加专用用户提示。</small>
+                        </span>
+                    </label>
+                </section>
+
+                <section class="settings-view" data-settings-view="controls" aria-label="操作设置">
+                    <button class="settings-back-btn btn btn--ghost" type="button" data-settings-back>返回设置分组</button>
+                    <div class="settings-view-head">
+                        <span class="otome-section-label">视角控制</span>
+                        <p>根据当前设备与习惯调节视角响应速度。数值越高，鼠标或触控滑动时镜头转动越快。</p>
+                    </div>
+                    <div class="settings-control-panel">
+                        <label class="settings-slider-row" for="mouse-sensitivity">
+                            <span>
+                                <strong>鼠标灵敏度</strong>
+                                <small>桌面端 Pointer Lock 与拖拽视角</small>
+                            </span>
+                            <em id="mouse-sensitivity-value">1.00x</em>
+                            <input id="mouse-sensitivity" type="range" min="0.35" max="2.5" step="0.05" value="1">
+                        </label>
+                        <label class="settings-slider-row" for="touch-sensitivity">
+                            <span>
+                                <strong>触控灵敏度</strong>
+                                <small>移动端滑动视角</small>
+                            </span>
+                            <em id="touch-sensitivity-value">1.00x</em>
+                            <input id="touch-sensitivity" type="range" min="0.35" max="2.5" step="0.05" value="1">
+                        </label>
+                        <label class="settings-slider-row settings-localization-card" for="localization-sensitivity">
+                            <span>
+                                <strong>本地化灵敏度</strong>
+                                <small>配置 Localization 的参数</small>
+                            </span>
+                            <em id="localization-sensitivity-value">0.50x</em>
+                            <input id="localization-sensitivity" type="range" min="0.5" max="2" step="0.05" value="0.5">
+                        </label>
                     </div>
                 </section>
 
@@ -663,8 +718,11 @@
                 </section>
             </div>
             <div class="otome-panel__foot settings-foot">
-                <span>RAG 只接入日常对话、约会进程和圆桌密语。</span>
-                <button id="settings-save" class="btn btn--primary">保存设置</button>
+                <span>青尘工作室 | BiliBili @CyanDust_青尘</span>
+                <div class="settings-foot-actions">
+                    <button id="settings-site-link" class="btn btn--ghost settings-site-link" type="button">访问官网</button>
+                    <button id="settings-save" class="btn btn--primary">保存设置</button>
+                </div>
             </div>
         </div>
     </div>

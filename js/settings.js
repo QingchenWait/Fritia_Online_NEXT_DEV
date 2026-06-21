@@ -3,19 +3,91 @@ import { initKnowledgeBasePanel, refreshKnowledgeBasePanel } from './knowledge_b
 const DEFAULTS = {
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini'
+    model: 'gpt-4o-mini',
+    mouseSensitivity: 1,
+    touchSensitivity: 1,
+    localizationSensitivity: 0.5,
+    deepseekIntimateMode: false,
+    deepseekIntimateModeStartedAt: 0,
+    deepseekIntimateModeDisabledAt: 0
 };
+
+const SECTION_SUBTITLES = {
+    model: '配置对话模型连接，所有密钥只保存在当前浏览器。',
+    controls: '设置鼠标和触控的灵敏度。',
+    knowledge: '导入外部文本知识库，进一步扩展世界观与人物设定。'
+};
+
+function clampSensitivity(value) {
+    const next = Number(value);
+    if (!Number.isFinite(next)) return 1;
+    return Math.min(2.5, Math.max(0.35, next));
+}
+
+function clampLocalizationSensitivity(value) {
+    const next = Number(value);
+    if (!Number.isFinite(next)) return 0.5;
+    return Math.min(2, Math.max(0.5, next));
+}
+
+function normalizeTimestamp(value) {
+    const next = Number(value);
+    return Number.isFinite(next) && next > 0 ? Math.floor(next) : 0;
+}
+
+function normalizeSettings(settings = {}) {
+    const parsed = { ...DEFAULTS, ...settings };
+    parsed.mouseSensitivity = clampSensitivity(parsed.mouseSensitivity);
+    parsed.touchSensitivity = clampSensitivity(parsed.touchSensitivity);
+    parsed.localizationSensitivity = clampLocalizationSensitivity(parsed.localizationSensitivity);
+    parsed.deepseekIntimateMode = Boolean(parsed.deepseekIntimateMode);
+    parsed.deepseekIntimateModeStartedAt = normalizeTimestamp(parsed.deepseekIntimateModeStartedAt);
+    parsed.deepseekIntimateModeDisabledAt = normalizeTimestamp(parsed.deepseekIntimateModeDisabledAt);
+    return parsed;
+}
+
+export function isDeepSeekIntimateModeAvailable(settings = getSettings()) {
+    const model = String(settings?.model || '').toLowerCase();
+    return model.includes('deepseek')
+        && Math.abs(clampLocalizationSensitivity(settings?.localizationSensitivity) - 1) < 0.001;
+}
+
+export function shouldUseDeepSeekIntimateMode(settings = getSettings()) {
+    return Boolean(settings?.deepseekIntimateMode) && isDeepSeekIntimateModeAvailable(settings);
+}
 
 export function getSettings() {
     try {
         const saved = localStorage.getItem('fritia-settings');
-        if (saved) return { ...DEFAULTS, ...JSON.parse(saved) };
+        if (saved) {
+            return normalizeSettings(JSON.parse(saved));
+        }
     } catch {}
     return { ...DEFAULTS };
 }
 
 export function saveSettings(settings) {
-    localStorage.setItem('fritia-settings', JSON.stringify(settings));
+    const previous = getSettings();
+    const next = normalizeSettings({ ...previous, ...settings });
+    const wasIntimateActive = shouldUseDeepSeekIntimateMode(previous);
+    const willBeIntimateActive = shouldUseDeepSeekIntimateMode(next);
+    const now = Date.now();
+
+    if (willBeIntimateActive && !wasIntimateActive) {
+        next.deepseekIntimateModeStartedAt = now;
+    } else if (willBeIntimateActive && !next.deepseekIntimateModeStartedAt) {
+        next.deepseekIntimateModeStartedAt = now;
+    }
+
+    if (!willBeIntimateActive && wasIntimateActive) {
+        if (!next.deepseekIntimateModeStartedAt) {
+            next.deepseekIntimateModeStartedAt = previous.deepseekIntimateModeDisabledAt || 1;
+        }
+        next.deepseekIntimateModeDisabledAt = now;
+    }
+
+    localStorage.setItem('fritia-settings', JSON.stringify(next));
+    document.dispatchEvent(new CustomEvent('fritia-settings-updated', { detail: getSettings() }));
 }
 
 export function initSettings(options = {}) {
@@ -24,20 +96,73 @@ export function initSettings(options = {}) {
     document.getElementById('api-key').value = settings.apiKey;
     document.getElementById('base-url').value = settings.baseUrl;
     document.getElementById('model-name').value = settings.model;
+    const mouseSlider = document.getElementById('mouse-sensitivity');
+    const touchSlider = document.getElementById('touch-sensitivity');
+    const localizationSlider = document.getElementById('localization-sensitivity');
+    const mouseValue = document.getElementById('mouse-sensitivity-value');
+    const touchValue = document.getElementById('touch-sensitivity-value');
+    const localizationValue = document.getElementById('localization-sensitivity-value');
+    const intimateCard = document.getElementById('deepseek-intimate-mode-card');
+    const intimateToggle = document.getElementById('deepseek-intimate-mode');
 
     const panel = document.getElementById('settings-panel');
     const toggle = document.getElementById('settings-toggle');
+    const subtitle = document.getElementById('settings-subtitle');
     const sectionButtons = [...document.querySelectorAll('[data-settings-section]')];
     const sectionViews = [...document.querySelectorAll('[data-settings-view]')];
 
+    function formatSensitivity(value) {
+        return `${clampSensitivity(value).toFixed(2)}x`;
+    }
+
+    function applySensitivityInputs(nextSettings = getSettings()) {
+        const mouse = clampSensitivity(nextSettings.mouseSensitivity);
+        const touch = clampSensitivity(nextSettings.touchSensitivity);
+        const localization = clampLocalizationSensitivity(nextSettings.localizationSensitivity);
+        if (mouseSlider) mouseSlider.value = String(mouse);
+        if (touchSlider) touchSlider.value = String(touch);
+        if (localizationSlider) localizationSlider.value = String(localization);
+        if (mouseValue) mouseValue.textContent = formatSensitivity(mouse);
+        if (touchValue) touchValue.textContent = formatSensitivity(touch);
+        if (localizationValue) localizationValue.textContent = formatSensitivity(localization);
+        if (intimateToggle) intimateToggle.checked = Boolean(nextSettings.deepseekIntimateMode);
+        updateDeepSeekIntimateVisibility();
+    }
+
+    function updateSensitivityPreview() {
+        if (mouseValue) mouseValue.textContent = formatSensitivity(mouseSlider?.value);
+        if (touchValue) touchValue.textContent = formatSensitivity(touchSlider?.value);
+        if (localizationValue) localizationValue.textContent = formatSensitivity(clampLocalizationSensitivity(localizationSlider?.value));
+        updateDeepSeekIntimateVisibility();
+    }
+
+    function getDraftSettings() {
+        return {
+            apiKey: document.getElementById('api-key').value.trim(),
+            baseUrl: document.getElementById('base-url').value.trim().replace(/\/+$/, ''),
+            model: document.getElementById('model-name').value.trim(),
+            mouseSensitivity: clampSensitivity(mouseSlider?.value),
+            touchSensitivity: clampSensitivity(touchSlider?.value),
+            localizationSensitivity: clampLocalizationSensitivity(localizationSlider?.value),
+            deepseekIntimateMode: Boolean(intimateToggle?.checked)
+        };
+    }
+
+    function updateDeepSeekIntimateVisibility() {
+        if (!intimateCard) return;
+        const visible = isDeepSeekIntimateModeAvailable(getDraftSettings());
+        intimateCard.classList.toggle('hidden', !visible);
+    }
+
     function showSection(sectionId) {
-        const next = sectionId === 'knowledge' ? 'knowledge' : 'model';
+        const next = ['model', 'controls', 'knowledge'].includes(sectionId) ? sectionId : 'model';
         sectionButtons.forEach(btn => {
             btn.classList.toggle('active', btn.dataset.settingsSection === next);
         });
         sectionViews.forEach(view => {
             view.classList.toggle('active', view.dataset.settingsView === next);
         });
+        if (subtitle) subtitle.textContent = SECTION_SUBTITLES[next] || SECTION_SUBTITLES.model;
         panel.classList.add('is-detail');
         if (next === 'knowledge') {
             void refreshKnowledgeBasePanel();
@@ -66,6 +191,12 @@ export function initSettings(options = {}) {
     }
 
     initKnowledgeBasePanel();
+    applySensitivityInputs(settings);
+
+    mouseSlider?.addEventListener('input', updateSensitivityPreview);
+    touchSlider?.addEventListener('input', updateSensitivityPreview);
+    localizationSlider?.addEventListener('input', updateSensitivityPreview);
+    document.getElementById('model-name')?.addEventListener('input', updateDeepSeekIntimateVisibility);
 
     toggle.addEventListener('click', () => {
         if (panel.classList.contains('hidden')) {
@@ -88,11 +219,7 @@ export function initSettings(options = {}) {
     });
 
     document.getElementById('settings-save').addEventListener('click', () => {
-        const s = {
-            apiKey: document.getElementById('api-key').value.trim(),
-            baseUrl: document.getElementById('base-url').value.trim().replace(/\/+$/, ''),
-            model: document.getElementById('model-name').value.trim()
-        };
+        const s = getDraftSettings();
         if (!s.baseUrl) s.baseUrl = DEFAULTS.baseUrl;
         if (!s.model) s.model = DEFAULTS.model;
         saveSettings(s);
@@ -101,5 +228,9 @@ export function initSettings(options = {}) {
 
     document.getElementById('settings-close').addEventListener('click', () => {
         closePanel();
+    });
+
+    document.getElementById('settings-site-link')?.addEventListener('click', () => {
+        window.open('https://qingchenwait.github.io/fritia_online_guide/', '_blank', 'noopener,noreferrer');
     });
 }

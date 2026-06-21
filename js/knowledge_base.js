@@ -8,10 +8,27 @@ const DEFAULT_CANDIDATE_LIMIT = 50;
 const DEFAULT_INJECT_LIMIT = 6;
 const MAX_UPLOAD_BYTES = 1.5 * 1024 * 1024;
 const MAX_PREVIEW_CHUNKS = 80;
+const DEBUG_KEY = 'fritia_kb_debug';
 
 const STOP_WORDS = new Set([
     'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'you', 'your',
     'are', 'was', 'were', 'have', 'has', 'had', 'not', 'but', 'all', 'can'
+]);
+
+const QUERY_WEAK_TOKENS = new Set([
+    ...STOP_WORDS,
+    'what', 'when', 'where', 'which', 'who', 'why', 'how', 'please', 'tell',
+    'about', 'answer', 'question', 'doc', 'docs', 'document', 'file', 'note',
+    'knowledge', 'base', 'rag', 'kb', 'is', 'it', 'its', 'he', 'she', 'him',
+    'her', 'his', 'they', 'them', 'their', 'there', 'here', 'in', 'on', 'of',
+    'to', 'as', 'by', 'or', 'if',
+    '知识', '识库', '文档', '资料', '参考', '内容', '里面', '关于', '查询',
+    '检索', '问题', '回答', '告诉', '一下', '这个', '那个', '什么', '怎么',
+    '如何', '为什么', '是否', '哪里', '哪个', '哪些', '请问', '根据', '提到',
+    '说明', '解释', '帮我', '看看', '说说', '相关', '信息', '内容',
+    '知', '识', '库', '文', '档', '资', '料', '里', '面', '问', '答', '查',
+    '找', '说', '讲', '提', '吗', '呢', '啊', '呀', '的', '了', '和', '与',
+    '在', '是', '有', '为', '把', '对', '给', '中'
 ]);
 
 let dbPromise = null;
@@ -360,6 +377,163 @@ function uniqueTokens(text) {
     return [...new Set(tokenize(text))];
 }
 
+function normalizeQueryToken(token) {
+    return String(token || '').trim().toLowerCase();
+}
+
+function isWeakQueryToken(token) {
+    const value = normalizeQueryToken(token);
+    if (!value) return true;
+    if (QUERY_WEAK_TOKENS.has(value)) return true;
+    if (/^[0-9]+$/.test(value)) return true;
+    return false;
+}
+
+function stripWeakQueryPhrases(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/知识库|知识|文档|资料|参考资料|参考|文件|内容|信息|里面|里|中/g, ' ')
+        .replace(/关于|根据|查询|检索|搜索|查找|找找|看看|说说|说了|讲了|提到|写了|说明|解释/g, ' ')
+        .replace(/请问|请|帮我|告诉我|回答|问题|相关|一下|这个|那个|这些|那些|当前/g, ' ')
+        .replace(/是什么|什么是|为什么|怎么|如何|是否|哪里|哪个|哪些|什么/g, ' ')
+        .replace(/[的吗呢啊呀了吧嘛喔哦]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getImportantQueryTokens(text) {
+    const allTokens = uniqueTokens(stripWeakQueryPhrases(text));
+    const important = allTokens.filter(token => !isWeakQueryToken(token));
+    return important;
+}
+
+function analyzeSearchQuery(query, options = {}) {
+    const primaryText = String(options.primaryQuery || query || '').trim();
+    const combinedText = String(query || '').trim();
+    const primaryTokens = uniqueTokens(primaryText);
+    const queryTokens = uniqueTokens(combinedText);
+    const primaryImportantTokens = getImportantQueryTokens(primaryText);
+    const combinedImportantTokens = [
+        ...new Set([
+            ...primaryImportantTokens,
+            ...getImportantQueryTokens(combinedText)
+        ])
+    ];
+    const importantTokens = primaryImportantTokens.length > 0 || !primaryText
+        ? combinedImportantTokens
+        : [];
+    const auxiliaryTokens = queryTokens.filter(token => !primaryTokens.includes(token) && !isWeakQueryToken(token));
+    return {
+        text: combinedText,
+        primaryText,
+        queryTokens,
+        primaryTokens,
+        primaryImportantTokens,
+        importantTokens,
+        auxiliaryTokens
+    };
+}
+
+function tokenSet(tokens) {
+    return new Set((tokens || []).map(normalizeQueryToken).filter(Boolean));
+}
+
+function getMatchedTokens(sourceTokens, queryTokens) {
+    const source = tokenSet(sourceTokens);
+    return (queryTokens || []).filter(token => source.has(normalizeQueryToken(token)));
+}
+
+function hasAnyToken(sourceTokens, queryTokens) {
+    return getMatchedTokens(sourceTokens, queryTokens).length > 0;
+}
+
+function calculateMetadataStats(doc, queryInfo) {
+    const titleMatches = getMatchedTokens(doc.titleTokens || [], queryInfo.importantTokens);
+    const fileMatches = getMatchedTokens(doc.fileTokens || [], queryInfo.importantTokens);
+    const allTitleMatches = getMatchedTokens(doc.titleTokens || [], queryInfo.queryTokens);
+    const allFileMatches = getMatchedTokens(doc.fileTokens || [], queryInfo.queryTokens);
+    return {
+        titleMatches,
+        fileMatches,
+        allTitleMatches,
+        allFileMatches,
+        titleScore: (titleMatches.length * 0.9) + Math.max(0, allTitleMatches.length - titleMatches.length) * 0.28,
+        fileScore: (fileMatches.length * 0.65) + Math.max(0, allFileMatches.length - fileMatches.length) * 0.2
+    };
+}
+
+function calculateCoverage(matchedTokens, importantTokens) {
+    const important = tokenSet(importantTokens);
+    if (important.size === 0) return 0;
+    const matchedImportant = new Set();
+    for (const token of matchedTokens || []) {
+        const value = normalizeQueryToken(token);
+        if (important.has(value)) matchedImportant.add(value);
+    }
+    return matchedImportant.size / important.size;
+}
+
+function calculateLengthPenalty(doc) {
+    const length = Math.max(1, Number(doc?.length) || 1);
+    if (length < 24) return 0.45;
+    if (length < 48) return 0.2;
+    return 0;
+}
+
+function isRelevantCandidate(candidate, queryInfo) {
+    if (!candidate) return false;
+    const importantCount = tokenSet(queryInfo.importantTokens).size;
+    if (importantCount === 0) return false;
+    const hasMetadataMatch = candidate.titleMatches.length > 0 || candidate.fileMatches.length > 0;
+    const hasBodyMatch = candidate.matchedTerms.length > 0;
+    if (!hasBodyMatch && !hasMetadataMatch) return false;
+    if (importantCount <= 1) {
+        return hasMetadataMatch || candidate.coverage >= 1 || candidate.bm25Score >= 0.85;
+    }
+    if (candidate.coverage >= 0.3) return true;
+    if (hasMetadataMatch && candidate.coverage >= 0.16) return true;
+    return candidate.bm25Score >= 2.4 && candidate.coverage >= 0.16;
+}
+
+function isHighConfidenceCandidate(candidate) {
+    if (!candidate) return false;
+    if (candidate.coverage >= 0.5 && candidate.finalScore >= 1.2) return true;
+    if ((candidate.titleMatches.length > 0 || candidate.fileMatches.length > 0) && candidate.coverage >= 0.3) return true;
+    return false;
+}
+
+function isKnowledgeBaseDebugEnabled() {
+    try {
+        return localStorage.getItem(DEBUG_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function debugKnowledgeSearch(payload) {
+    if (!isKnowledgeBaseDebugEnabled()) return;
+    try {
+        console.groupCollapsed('[KnowledgeBase][BM25]', payload.query || '');
+        console.log('primaryQuery:', payload.primaryQuery || '');
+        console.log('queryTokens:', payload.queryTokens || []);
+        console.log('primaryImportantTokens:', payload.primaryImportantTokens || []);
+        console.log('importantTokens:', payload.importantTokens || []);
+        console.table((payload.candidates || []).map(item => ({
+            chunkId: item.chunkId,
+            file: item.fileName,
+            title: item.titlePath,
+            index: item.index,
+            bm25: Number(item.bm25Score || 0).toFixed(3),
+            final: Number(item.finalScore || 0).toFixed(3),
+            coverage: Number(item.coverage || 0).toFixed(2),
+            matched: (item.matchedTerms || []).join(' ')
+        })));
+        console.groupEnd();
+    } catch (err) {
+        console.warn('[KnowledgeBase] debug log failed:', err);
+    }
+}
+
 function buildIndexRecord(kbId, chunks) {
     const documents = [];
     const postingsMap = new Map();
@@ -375,6 +549,7 @@ function buildIndexRecord(kbId, chunks) {
             fileId: chunk.fileId,
             fileName: chunk.fileName || '',
             titlePath: chunk.titlePath || '',
+            index: Number(chunk.index) || index + 1,
             length,
             fileTokens: uniqueTokens(chunk.fileName || ''),
             titleTokens: uniqueTokens(chunk.titlePath || '')
@@ -571,13 +746,94 @@ async function ensureIndex(kbId) {
     return indexRecord;
 }
 
-function addMetadataBoost(score, doc, queryTokens) {
-    let next = score;
-    for (const token of queryTokens) {
-        if (doc.titleTokens?.includes(token)) next += 0.45;
-        if (doc.fileTokens?.includes(token)) next += 0.25;
+function createCandidate(docIndex, doc, bm25Score, queryInfo, matchedTerms) {
+    const metadata = calculateMetadataStats(doc, queryInfo);
+    const uniqueMatchedTerms = [...new Set([
+        ...(matchedTerms || []),
+        ...metadata.titleMatches,
+        ...metadata.fileMatches
+    ])];
+    const coverage = calculateCoverage(uniqueMatchedTerms, queryInfo.importantTokens);
+    const primaryHitScore = hasAnyToken(doc.titleTokens || [], queryInfo.primaryTokens) || hasAnyToken(doc.fileTokens || [], queryInfo.primaryTokens)
+        ? 0.35
+        : 0;
+    const finalScore = bm25Score
+        + metadata.titleScore
+        + metadata.fileScore
+        + coverage * 1.35
+        + primaryHitScore
+        - calculateLengthPenalty(doc);
+    return {
+        docIndex,
+        doc,
+        bm25Score,
+        finalScore,
+        coverage,
+        matchedTerms: uniqueMatchedTerms,
+        titleMatches: metadata.titleMatches,
+        fileMatches: metadata.fileMatches
+    };
+}
+
+function sortCandidates(a, b) {
+    if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+    if (b.coverage !== a.coverage) return b.coverage - a.coverage;
+    return b.bm25Score - a.bm25Score;
+}
+
+function getDocChunkIndex(doc) {
+    const direct = Number(doc?.index);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+    const match = String(doc?.chunkId || '').match(/_chunk_(\d+)$/);
+    return match ? Number(match[1]) || 0 : 0;
+}
+
+function findNeighborCandidate(selected, docs, queryInfo, direction) {
+    const baseDoc = selected?.doc;
+    if (!baseDoc) return null;
+    const baseIndex = getDocChunkIndex(baseDoc);
+    const targetIndex = baseIndex + direction;
+    if (targetIndex < 1) return null;
+    const docIndex = docs.findIndex(doc => doc.fileId === baseDoc.fileId && getDocChunkIndex(doc) === targetIndex);
+    if (docIndex < 0) return null;
+    const doc = docs[docIndex];
+    return createCandidate(docIndex, doc, 0, queryInfo, []);
+}
+
+function buildSelectedCandidates(ranked, docs, queryInfo, limit) {
+    const selected = [];
+    const selectedDocIndexes = new Set();
+    const titleCounts = new Map();
+
+    function canAdd(candidate, allowWeakNeighbor = false) {
+        if (!candidate || selectedDocIndexes.has(candidate.docIndex)) return false;
+        const key = `${candidate.doc.fileId || ''}|${candidate.doc.titlePath || ''}`;
+        const maxPerTitle = allowWeakNeighbor ? 3 : 2;
+        if ((titleCounts.get(key) || 0) >= maxPerTitle) return false;
+        if (!allowWeakNeighbor && !isRelevantCandidate(candidate, queryInfo)) return false;
+        return true;
     }
-    return next;
+
+    function add(candidate) {
+        selected.push(candidate);
+        selectedDocIndexes.add(candidate.docIndex);
+        const key = `${candidate.doc.fileId || ''}|${candidate.doc.titlePath || ''}`;
+        titleCounts.set(key, (titleCounts.get(key) || 0) + 1);
+    }
+
+    for (const candidate of ranked) {
+        if (selected.length >= limit) break;
+        if (!canAdd(candidate)) continue;
+        add(candidate);
+        if (selected.length >= limit || !isHighConfidenceCandidate(candidate)) continue;
+        for (const direction of [-1, 1]) {
+            if (selected.length >= limit) break;
+            const neighbor = findNeighborCandidate(candidate, docs, queryInfo, direction);
+            if (canAdd(neighbor, true)) add(neighbor);
+        }
+    }
+
+    return selected.slice(0, limit);
 }
 
 export async function searchKnowledgeBase(query, options = {}) {
@@ -593,16 +849,17 @@ export async function searchKnowledgeBase(query, options = {}) {
     const docs = Array.isArray(indexRecord.documents) ? indexRecord.documents : [];
     if (docs.length === 0) return [];
 
-    const queryTokens = uniqueTokens(query);
-    if (queryTokens.length === 0) return [];
+    const queryInfo = analyzeSearchQuery(query, options);
+    if (queryInfo.queryTokens.length === 0) return [];
 
     const candidateScores = new Map();
+    const candidateMatches = new Map();
     const n = Math.max(1, Number(indexRecord.docCount) || docs.length);
     const avgDl = Math.max(1, Number(indexRecord.avgDocLength) || 1);
     const k1 = 1.5;
     const b = 0.75;
 
-    for (const token of queryTokens) {
+    for (const token of queryInfo.queryTokens) {
         const postings = indexRecord.postings?.[token];
         if (!Array.isArray(postings) || postings.length === 0) continue;
         const df = postings.length;
@@ -614,28 +871,44 @@ export async function searchKnowledgeBase(query, options = {}) {
             const dl = Math.max(1, Number(doc.length) || 1);
             const bm25 = idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / avgDl)));
             candidateScores.set(posting.i, (candidateScores.get(posting.i) || 0) + bm25);
+            if (!candidateMatches.has(posting.i)) candidateMatches.set(posting.i, new Set());
+            candidateMatches.get(posting.i).add(token);
         }
     }
 
     docs.forEach((doc, docIndex) => {
-        const boosted = addMetadataBoost(candidateScores.get(docIndex) || 0, doc, queryTokens);
-        if (boosted > 0) candidateScores.set(docIndex, boosted);
+        if (hasAnyToken(doc.titleTokens || [], queryInfo.queryTokens) || hasAnyToken(doc.fileTokens || [], queryInfo.queryTokens)) {
+            if (!candidateScores.has(docIndex)) candidateScores.set(docIndex, 0);
+        }
     });
 
     const candidateLimit = Math.max(1, Number(options.candidateLimit) || DEFAULT_CANDIDATE_LIMIT);
     const limit = Math.max(1, Number(options.limit) || DEFAULT_INJECT_LIMIT);
     const ranked = [...candidateScores.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, candidateLimit)
-        .slice(0, limit);
+        .map(([docIndex, bm25Score]) => createCandidate(
+            docIndex,
+            docs[docIndex],
+            bm25Score,
+            queryInfo,
+            [...(candidateMatches.get(docIndex) || [])]
+        ))
+        .filter(candidate => candidate.doc)
+        .sort(sortCandidates)
+        .slice(0, candidateLimit);
+
+    const selected = buildSelectedCandidates(ranked, docs, queryInfo, limit);
 
     const results = [];
-    for (const [docIndex, score] of ranked) {
-        const doc = docs[docIndex];
+    for (const candidate of selected) {
+        const doc = candidate.doc;
         const chunk = await getRecord('chunks', doc.chunkId);
         if (!chunk) continue;
         results.push({
-            score,
+            score: candidate.finalScore,
+            bm25Score: candidate.bm25Score,
+            finalScore: candidate.finalScore,
+            coverage: candidate.coverage,
+            matchedTerms: candidate.matchedTerms,
             knowledgeBaseId: kbId,
             knowledgeBaseName: kb.name,
             fileId: chunk.fileId,
@@ -646,6 +919,14 @@ export async function searchKnowledgeBase(query, options = {}) {
             text: chunk.text
         });
     }
+    debugKnowledgeSearch({
+        query: queryInfo.text,
+        primaryQuery: queryInfo.primaryText,
+        queryTokens: queryInfo.queryTokens,
+        primaryImportantTokens: queryInfo.primaryImportantTokens,
+        importantTokens: queryInfo.importantTokens,
+        candidates: results
+    });
     return results;
 }
 
@@ -670,23 +951,40 @@ function formatRagReferences(results) {
     return lines.join('\n');
 }
 
+function extractRagContextText(item) {
+    if (typeof item === 'string') return '';
+    if (!item || typeof item !== 'object') return '';
+    const role = String(item.role || item.speakerRole || '').toLowerCase();
+    if (role && !['user', 'player', 'human'].includes(role)) return '';
+    return item.content || item.text || item.message || '';
+}
+
+function buildSearchQueryText(options = {}) {
+    const primary = String(options.query || options.userInput || '').trim();
+    const recent = Array.isArray(options.recentMessages) ? options.recentMessages : [];
+    const contextText = recent
+        .slice(-8)
+        .map(extractRagContextText)
+        .filter(Boolean)
+        .slice(-3)
+        .join('\n')
+        .slice(-360);
+    return {
+        primary,
+        query: [primary, contextText].filter(Boolean).join('\n').trim()
+    };
+}
+
 export async function buildRagReferenceMessage(options = {}) {
     const mode = String(options.mode || '').trim();
     if (!['daily', 'date', 'roundtable'].includes(mode)) return null;
-    const recent = Array.isArray(options.recentMessages) ? options.recentMessages : [];
-    const recentText = recent
-        .slice(-6)
-        .map(item => {
-            if (typeof item === 'string') return item;
-            return item?.content || item?.text || '';
-        })
-        .filter(Boolean)
-        .join('\n')
-        .slice(-600);
-    const query = [options.query || options.userInput || '', recentText].filter(Boolean).join('\n').trim();
+    const { primary, query } = buildSearchQueryText(options);
     if (!query) return null;
     try {
-        const results = await searchKnowledgeBase(query, { limit: options.limit || DEFAULT_INJECT_LIMIT });
+        const results = await searchKnowledgeBase(query, {
+            limit: options.limit || DEFAULT_INJECT_LIMIT,
+            primaryQuery: primary || query
+        });
         if (results.length === 0) return null;
         return {
             role: 'system',
@@ -885,6 +1183,8 @@ function cacheUiElements() {
     ui.fileInput = document.getElementById('kb-file-input');
     ui.uploadBtn = document.getElementById('kb-upload-btn');
     ui.uploadStatus = document.getElementById('kb-upload-status');
+    ui.filesPanel = document.querySelector('.kb-files-panel');
+    ui.chunksPanel = document.querySelector('.kb-chunks-panel');
     ui.fileList = document.getElementById('kb-file-list');
     ui.previewTitle = document.getElementById('kb-preview-title');
     ui.chunkList = document.getElementById('kb-chunk-list');
@@ -894,6 +1194,24 @@ function setKbStatus(text, kind = 'info') {
     if (!ui.uploadStatus) return;
     ui.uploadStatus.textContent = text || '';
     ui.uploadStatus.dataset.kind = kind;
+}
+
+function isNarrowKnowledgeLayout() {
+    return Boolean(window.matchMedia?.('(max-width: 820px)').matches);
+}
+
+function collapseKnowledgeMobilePanels() {
+    if (!isNarrowKnowledgeLayout()) return;
+    ui.filesPanel?.classList.remove('is-expanded');
+    ui.chunksPanel?.classList.remove('is-expanded');
+}
+
+function bindCollapsibleKnowledgePanel(panel) {
+    panel?.addEventListener('click', (event) => {
+        if (!isNarrowKnowledgeLayout()) return;
+        if (event.target.closest('button, input, textarea, a')) return;
+        panel.classList.toggle('is-expanded');
+    });
 }
 
 function renderKnowledgeBaseList(kbs, activeId) {
@@ -1005,6 +1323,7 @@ async function renderKnowledgeBaseDetail(kb) {
 export async function refreshKnowledgeBasePanel() {
     if (!uiState.initialized) return;
     try {
+        collapseKnowledgeMobilePanels();
         const kbs = await listKnowledgeBases();
         const activeId = getActiveKnowledgeBaseId();
         if (uiState.selectedKbId && !kbs.some(kb => kb.id === uiState.selectedKbId)) {
@@ -1119,8 +1438,12 @@ function bindKnowledgeBaseUi() {
             return;
         }
         uiState.selectedFileId = fileId;
-        void refreshKnowledgeBasePanel();
+        void refreshKnowledgeBasePanel().then(() => {
+            if (isNarrowKnowledgeLayout()) ui.chunksPanel?.classList.add('is-expanded');
+        });
     });
+    bindCollapsibleKnowledgePanel(ui.filesPanel);
+    bindCollapsibleKnowledgePanel(ui.chunksPanel);
 }
 
 export function initKnowledgeBasePanel() {

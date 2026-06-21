@@ -111,6 +111,13 @@
     #settings-panel.is-detail .settings-nav { display: none; }
     #settings-panel:not(.is-detail) .settings-view { display: none; }
     #settings-panel.is-detail .settings-view.active { display: flex; }
+    #settings-panel.is-detail .settings-view[data-settings-view="knowledge"].active {
+        display: block;
+        height: 100%;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
     .settings-back-btn {
         display: inline-flex;
         align-self: flex-start;
@@ -119,7 +126,23 @@
         padding: 6px 12px;
         font-size: 0.78rem;
     }
-    .knowledge-workbench { grid-template-columns: 1fr; }
+    .settings-view[data-settings-view="knowledge"] {
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    .knowledge-workbench {
+        display: block;
+        flex: none;
+        grid-template-columns: 1fr;
+        min-height: auto;
+        overflow: visible;
+    }
+    .kb-main,
+    .kb-detail {
+        display: block;
+        min-height: auto;
+        overflow: visible;
+    }
     .kb-sidebar {
         border-right: 0;
         border-bottom: 1px solid var(--panel-line);
@@ -127,9 +150,54 @@
     }
     .kb-list { flex-direction: row; overflow-x: auto; overflow-y: hidden; }
     .kb-list-item { min-width: 190px; }
-    .kb-management-grid { grid-template-columns: 1fr; }
+    .kb-management-grid {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        overflow: visible;
+    }
     .kb-upload-console { grid-template-columns: 1fr; }
     .kb-actions { justify-content: flex-start; }
+    .settings-site-link { display: none; }
+    .kb-files-panel,
+    .kb-chunks-panel {
+        min-height: 0;
+        cursor: pointer;
+    }
+    .kb-files-panel .kb-panel-label,
+    .kb-chunks-panel .kb-panel-label {
+        min-height: 44px;
+        border-bottom: 0;
+    }
+    .kb-files-panel .kb-panel-label::after,
+    .kb-chunks-panel .kb-panel-label::after {
+        content: "展开";
+        color: var(--c-gold-deep);
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+    }
+    .kb-files-panel.is-expanded .kb-panel-label,
+    .kb-chunks-panel.is-expanded .kb-panel-label {
+        border-bottom: 1px solid var(--panel-line);
+    }
+    .kb-files-panel.is-expanded .kb-panel-label::after,
+    .kb-chunks-panel.is-expanded .kb-panel-label::after {
+        content: "收起";
+    }
+    .kb-files-panel:not(.is-expanded) .kb-file-list,
+    .kb-chunks-panel:not(.is-expanded) .kb-chunk-list {
+        display: none;
+    }
+    .kb-files-panel.is-expanded,
+    .kb-chunks-panel.is-expanded {
+        min-height: 220px;
+        cursor: default;
+    }
+    .kb-files-panel.is-expanded .kb-file-list,
+    .kb-chunks-panel.is-expanded .kb-chunk-list {
+        max-height: min(42vh, 360px);
+        overflow-y: auto;
+    }
     .roundtable-shell { height: 94vh; }
     .roundtable-setup-grid { grid-template-columns: 1fr; overflow-y: auto; }
     .roundtable-participant-list { max-height: 330px; }
@@ -208,7 +276,24 @@
     }
     .settings-view-head { padding: 14px 16px 10px; }
     .settings-form-grid { padding: 14px 16px; }
-    .settings-note-card { margin: 0 16px 16px; }
+    .settings-note-card,
+    .settings-api-card,
+    .settings-intimate-card {
+        margin: 0 16px 16px;
+        width: calc(100% - 32px);
+    }
+    .settings-control-panel { padding: 14px 16px; }
+    .settings-slider-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
+    .settings-slider-row em {
+        justify-self: start;
+    }
+    .settings-foot-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
     .kb-detail-head {
         display: grid;
         grid-template-columns: 1fr;
@@ -217,8 +302,6 @@
     .kb-status { padding-inline: 14px; }
     .kb-upload-console { margin-inline: 14px; }
     .kb-management-grid { padding: 0 14px 14px; }
-    .kb-files-panel,
-    .kb-chunks-panel { min-height: 220px; }
     .kb-file-card { grid-template-columns: minmax(0, 1fr); }
     .kb-danger-mini { justify-self: start; }
 

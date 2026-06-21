@@ -1,6 +1,6 @@
 ﻿# Fritia Online NEXT 开发文档
 
-更新时间：2026-06-21
+更新时间：2026-06-22
 
 本文是当前静态 Three.js 项目的开发事实源。项目不依赖后端服务，游戏数据、设置、历史、成就和造梦家具主要存储在浏览器 `localStorage` 中；自定义访客 PMX/人格文档与本地知识库数据存储在 IndexedDB，并通过前端 ZIP 存档机制迁移。
 
@@ -54,6 +54,7 @@ fritia_online_v3/
 │   ├── bar_guest_system.js
 │   ├── bartending_challenge.js
 │   ├── roundtable_whispers.js
+│   ├── deepseek_intimate_mode.js
 │   ├── knowledge_base.js
 │   ├── bar_performance.js
 │   ├── zip_store.js
@@ -70,7 +71,8 @@ fritia_online_v3/
     ├── _ui/                # UI 重制美术资源(原创手绘 SVG)：角标/分隔/光效/花瓣/火花/暖色头图标
     ├── _queries/
     │   ├── system_prompt.txt
-    │   └── date_prompt.txt
+    │   ├── date_prompt.txt
+    │   └── deepseek_special_prompt.txt
     ├── _voices/
     │   ├── startup_1.wav
     │   ├── talk_1.mp3 ... talk_5.mp3
@@ -534,24 +536,49 @@ localStorage key：`fritia-settings`
 
 导出：
 
-- `getSettings()`：读取设置，包含 `apiKey`、`baseUrl`、`model`。
-- `saveSettings(settings)`：保存设置。
+- `getSettings()`：读取设置，包含 `apiKey`、`baseUrl`、`model`、`mouseSensitivity`、`touchSensitivity`、`localizationSensitivity`、`deepseekIntimateMode`、`deepseekIntimateModeStartedAt`、`deepseekIntimateModeDisabledAt`。
+- `saveSettings(settings)`：保存设置，并派发 `fritia-settings-updated`。
 - `initSettings({ controlsModule })`：绑定设置面板 DOM 和按钮，并在打开/关闭设置页时处理控制模式恢复。
 
 默认值：
 
 - `baseUrl`: `https://api.openai.com/v1`
 - `model`: `gpt-4o-mini`
+- `mouseSensitivity`: `1`
+- `touchSensitivity`: `1`
+- `localizationSensitivity`: `0.5`
+- `deepseekIntimateMode`: `false`
+- `deepseekIntimateModeStartedAt`: `0`
+- `deepseekIntimateModeDisabledAt`: `0`
 
 所有 LLM 调用都复用这里的设置。
+
+操作设置：
+
+- `mouseSensitivity` 和 `touchSensitivity` 存在 `fritia-settings` 中，取值由 UI 滑块限制在 `0.35~2.5`，默认 `1.00x`。
+- `localizationSensitivity` 存在 `fritia-settings` 中，取值由 UI 滑块限制在 `0.5~2`，步进 `0.05`，默认 `0.50x`，需要玩家手动调到 `1.00x` 才会满足亲密模式显示条件。
+- `controls.js` 在处理 Pointer Lock 鼠标视角、手动拖拽视角和移动端触控视角时使用该设置；初始化时读取一次，保存设置后通过 `fritia-settings-updated` 事件刷新缓存，未保存或旧存档缺失字段时使用默认值。
+- `deepseekIntimateMode` 只有在模型名称包含 `deepseek` 且 `localizationSensitivity === 1` 时可见且可生效；即使存档中为 true，只要条件不满足也不会参与 LLM 请求。
+- `deepseekIntimateModeStartedAt` / `deepseekIntimateModeDisabledAt` 记录亲密模式有效状态切换时间，用于关闭后隔离亲密模式期间生成的 bot 上下文。
 
 设置页结构：
 
 - `#settings-panel` 是左右分组设置页；宽屏左侧为设置分组，右侧为当前详情。
 - `data-settings-section="model"` / `data-settings-view="model"`：大模型设置，保留 `#api-key`、`#base-url`、`#model-name` 和 `#settings-save`。
+- `data-settings-section="controls"` / `data-settings-view="controls"`：操作设置，包含 `#mouse-sensitivity`、`#touch-sensitivity`、`#localization-sensitivity` 及对应数值显示。
 - `data-settings-section="knowledge"` / `data-settings-view="knowledge"`：知识库管理。
+- 设置标题栏副标题会随分组切换；底栏作者文案为 `青尘工作室 | BiliBili @CyanDust_青尘`，宽屏显示 `#settings-site-link` 访问官网，窄屏隐藏。
+- 大模型设置页提供 DeepSeek、MiMO、Qwen 千问、Kimi 的官方 API 入口按钮，仅打开外部控制台，不保存任何额外凭据。
+- 自定义事件：`fritia-settings-updated`，保存设置后派发，detail 为 `getSettings()` 规范化后的设置对象；`controls.js` 用它同步灵敏度缓存。
 - 窄屏先显示分组列表，点击分组后进入详情；详情内 `data-settings-back` 返回分组列表。
 - 打开设置页时释放控制模式；关闭时派发 `fritia-overlay-closed`。
+
+DeepSeek 亲密模式：`js/deepseek_intimate_mode.js`
+
+- `buildDeepSeekIntimateUserMessage(settings)` 只在 `shouldUseDeepSeekIntimateMode(settings)` 为 true 时读取 `src/_queries/deepseek_special_prompt.txt`，返回一条 `{ role: "user", content: ... }`。
+- 仅日常对话、约会进程和圆桌密语会调用该模块；造梦、礼物、调酒挑战、访客对话等其他 LLM 请求禁止附加该提示。
+- 附加内容作为本轮额外 user 消息进入请求，不作为 system prompt，不写入普通对话历史。
+- 亲密模式有效时生成的日常/约会 assistant 回复和圆桌 bot 回复会带 `deepseekIntimateMode: true` 标记；关闭亲密模式后，这些回复仍保留在 UI、历史和存档中，但不会再作为后续 LLM 请求上下文、圆桌 `topicSummary` 或 RAG 辅助上下文，避免旧回复继续放大亲密模式指令。
 
 ## 本地知识库 / BM25 RAG：`js/knowledge_base.js`
 
@@ -580,6 +607,7 @@ IndexedDB：
 localStorage key：
 
 - `fritia_knowledge_base_state`：仅保存 `version/activeKbId/updatedAt`，大文本和索引不写入 `localStorage`。
+- `fritia_kb_debug`：可选调试开关。设置为 `"1"` 后，BM25 检索会在 console 输出本轮检索 query、有效关键词、候选分数、覆盖率、来源文件和标题路径。
 
 文本处理：
 
@@ -587,6 +615,9 @@ localStorage key：
 - Markdown 清洗会移除代码围栏、HTML 标签、无效强调符号和链接 URL，尽量保留标题、列表和段落结构。
 - 分块按标题、段落和长度组合；每个分块保存来源文件、标题路径和分块序号。
 - 检索分词对英文小写化并按词切分；中文、日文、韩文使用 1-gram + 2-gram 字符切分。
+- 检索 query 构造只用于知识库召回，不改变传给 LLM 的正常对话历史；当前用户输入是主查询，少量最近用户侧文本只作为辅助召回信号，assistant/bot 历史不会参与 BM25 query，避免上一轮错误回答污染首轮检索。
+- 候选先按 BM25 召回默认 50 条，再按标题/文件名命中、有效关键词覆盖率、短分块惩罚等本地信号重排；低相关候选会被过滤，不会强行注入参考资料。
+- 高置信命中可补入同文件相邻分块，补充分块仍计入最终注入上限，避免跨分块答案被截断。
 
 RAG 接入：
 
@@ -602,6 +633,7 @@ RAG 接入：
 设置页 DOM：
 
 - `#kb-create-name`、`#kb-create-btn`、`#kb-list`、`#kb-empty`、`#kb-detail`、`#kb-current-title`、`#kb-current-meta`、`#kb-enable-toggle`、`#kb-delete-btn`、`#kb-active-status`、`#kb-file-input`、`#kb-upload-btn`、`#kb-upload-status`、`#kb-file-list`、`#kb-preview-title`、`#kb-chunk-list`。
+- 窄屏下 `kb-files-panel` 和 `kb-chunks-panel` 默认折叠，点击对应面板标题区域可展开，再次点击收起；选择文件后会自动展开分块预览。
 - 自定义事件：`fritia-knowledge-base-updated`，detail 可能含 `{ activeKbId }`、`{ deletedKbId }`、`{ kbId }` 或 `{ imported: true }`。
 
 ## 日常对话：`js/dialogue.js`
@@ -995,9 +1027,19 @@ DOM ID：
 设置：
 
 - `#settings-panel`
+- `#settings-subtitle`
 - `#api-key`
 - `#base-url`
 - `#model-name`
+- `#deepseek-intimate-mode-card`
+- `#deepseek-intimate-mode`
+- `#mouse-sensitivity`
+- `#mouse-sensitivity-value`
+- `#touch-sensitivity`
+- `#touch-sensitivity-value`
+- `#localization-sensitivity`
+- `#localization-sensitivity-value`
+- `#settings-site-link`
 - `#settings-save`
 - `#settings-close`
 
@@ -1226,14 +1268,14 @@ DOM ID：
 
 ## localStorage Key
 
-- `fritia-settings`：API 设置。
+- `fritia-settings`：API 设置、操作灵敏度、亲密模式开关与 `deepseekIntimateModeStartedAt/deepseekIntimateModeDisabledAt` 切换时间。
 - `fritia_game_state`：游戏时间、数据金、好感、统计、礼物；`stats` 包含入场券/成就用的 `sleepModeCount`、`danceWatchCount`、`bartendingChallengeWins`。
-- `fritia_chat_history`：日常对话历史。
-- `fritia_date_history`：约会对话历史。
+- `fritia_chat_history`：日常对话历史；亲密模式有效时生成的 assistant 回复可带 `deepseekIntimateMode: true`。
+- `fritia_date_history`：约会对话历史；亲密模式有效时生成的 assistant 回复可带 `deepseekIntimateMode: true`。
 - `fritia_bar_conversation_history`：暖调闲聚访客对话历史。
 - `fritia_bar_guest_cards`：暖调闲聚自定义访客元数据；PMX/人格文档 Blob 存储于 IndexedDB `fritia_bar_guest_assets/assets`。
 - `fritia_bar_guest_builtin_state`：暖调闲聚内置访客保留状态；当前用于记录芬妮是否应随酒吧场景自动加载。
-- `fritia_roundtable_whispers`：圆桌密语完整消息历史 `fullMessages/messages`、`fullTopicSummary/topicSummary`、参与者选择、自动接话/idle 设置和 `botChainLimit`；消息仅保留最近 5 天内最多 240 条，旧存档的 `messages/topicSummary` 会自动迁移。
+- `fritia_roundtable_whispers`：圆桌密语完整消息历史 `fullMessages/messages`、`fullTopicSummary/topicSummary`、参与者选择、自动接话/idle 设置和 `botChainLimit`；消息仅保留最近 5 天内最多 240 条，旧存档的 `messages/topicSummary` 会自动迁移；亲密模式有效时生成的 bot 回复可带 `deepseekIntimateMode: true`。
 - `fritia_achievements`：成就解锁与通知状态。
 - `fritia_painting`：挂画图片 data URL。
 - `fritia_dream_furniture`：造梦家具记录数组。
@@ -1449,15 +1491,18 @@ Escape：
 知识库：
 
 1. 点击右上角系统设置应释放控制模式；关闭设置后派发 `fritia-overlay-closed` 并恢复控制模式。
-2. 宽屏设置页左侧显示“大模型设置 / 知识库”分组，右侧显示详情；窄屏先显示分组列表，点击分组后进入详情并可返回。
-3. 大模型设置保留 `API Key / Base URL / 模型名称`，保存后仍写入 `fritia-settings`。
-4. 在知识库页创建知识库后，可启用/停用该知识库；启用状态写入 `fritia_knowledge_base_state`。
-5. 上传 `.txt` 和 `.md` 文件后显示构建进度，文件列表出现新文件，分块预览可查看标题路径和片段正文。
-6. 空文件、非 txt/md 文件、超过限制的大文件应显示失败提示，不留下不可用半成品。
-7. 删除文件会确认并重建索引；删除知识库会确认并清空其文件、分块和索引。
-8. 启用知识库后，日常对话、约会开场/发送、圆桌密语会自动检索相关分块并注入本轮 LLM 请求；未启用知识库时原行为不变。
-9. 知识库参考资料不应出现在历史面板、日常/约会历史或圆桌消息列表中。
-10. 导出 ZIP 后重新导入，知识库、文件、分块和启用状态可恢复，并能继续检索；导入旧存档缺少 `knowledgeBase` 字段时不报错。
+2. 宽屏设置页左侧显示“大模型设置 / 操作设置 / 知识库”分组，右侧显示详情；窄屏先显示分组列表，点击分组后进入详情并可返回。
+3. 大模型设置保留 `API Key / Base URL / 模型名称`，保存后仍写入 `fritia-settings`；API 入口按钮可新标签打开 DeepSeek、MiMO、Qwen 千问和 Kimi 控制台。
+4. 操作设置可调鼠标、触控和本地化灵敏度；本地化灵敏度默认 `0.50x`，手动调为 `1.00x` 且模型名包含 `deepseek` 时，大模型设置页显示亲密模式开关。
+5. 亲密模式开启后，只有日常对话、约会和圆桌密语会以额外 user 消息追加 `src/_queries/deepseek_special_prompt.txt`；本地化灵敏度不为 `1.00x`、模型名不是 DeepSeek 或其他 LLM 玩法均不得追加该提示。
+6. 在知识库页创建知识库后，可启用/停用该知识库；启用状态写入 `fritia_knowledge_base_state`。
+7. 上传 `.txt` 和 `.md` 文件后显示构建进度，文件列表出现新文件，分块预览可查看标题路径和片段正文。
+8. 窄屏知识库页中，文件列表和详细分块默认折叠，点击对应面板可展开/收起。
+9. 空文件、非 txt/md 文件、超过限制的大文件应显示失败提示，不留下不可用半成品。
+10. 删除文件会确认并重建索引；删除知识库会确认并清空其文件、分块和索引。
+11. 启用知识库后，日常对话、约会开场/发送、圆桌密语会自动检索相关分块并注入本轮 LLM 请求；未启用知识库时原行为不变。
+12. 知识库参考资料不应出现在历史面板、日常/约会历史或圆桌消息列表中。
+13. 导出 ZIP 后重新导入，知识库、文件、分块和启用状态可恢复，并能继续检索；导入旧存档缺少 `knowledgeBase` 字段时不报错。
 
 旧功能回归：
 
