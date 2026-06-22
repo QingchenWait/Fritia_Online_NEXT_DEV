@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { initScene } from './scene.js';
 import { createRoom } from './room.js';
 import { initControls } from './controls.js';
@@ -125,6 +125,8 @@ let deskMesh;
 let doorMesh;
 let windowMesh;
 let dreamWindowMesh;
+let windowShadowLight;
+let dreamWindowShadowLight;
 let terminalMesh;
 let dreamTerminalMesh;
 let dreamDoorMesh;
@@ -326,6 +328,8 @@ async function init() {
     doorMesh = room.doorMesh;
     windowMesh = room.windowMesh;
     dreamWindowMesh = room.dreamWindowMesh;
+    windowShadowLight = sceneData.windowShadowLight;
+    dreamWindowShadowLight = sceneData.dreamWindowShadowLight;
     terminalMesh = room.terminalMesh;
     dreamTerminalMesh = room.dreamTerminalMesh;
     dreamDoorMesh = room.dreamDoorMesh;
@@ -1454,6 +1458,8 @@ function updateWindowSky() {
     const color = night.clone().lerp(day, dayFactor);
     applyWindowSkyColor(windowMesh, color);
     applyWindowSkyColor(dreamWindowMesh, color);
+    updateWindowShadowLight(windowShadowLight, dayFactor, 0.04, 1.7, 6.2);
+    updateWindowShadowLight(dreamWindowShadowLight, dayFactor, 0.036, 1.5, 7.2);
 }
 
 function applyWindowSkyColor(mesh, color) {
@@ -1463,6 +1469,16 @@ function applyWindowSkyColor(mesh, color) {
         mesh.material.emissive.copy(color);
         mesh.material.emissiveIntensity = 0.3;
     }
+}
+
+function updateWindowShadowLight(light, dayFactor, nightIntensity, dayIntensity, distance) {
+    if (!light) return;
+    const nightColor = new THREE.Color(0x6d86bd);
+    const dayColor = new THREE.Color(0xc8ddff);
+    const duskBoost = Math.sin(dayFactor * Math.PI) * 0.1;
+    light.color.copy(nightColor.lerp(dayColor, dayFactor));
+    light.intensity = nightIntensity + (dayIntensity - nightIntensity) * dayFactor + duskBoost;
+    light.distance = distance;
 }
 
 function animate() {
