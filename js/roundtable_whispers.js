@@ -1,6 +1,6 @@
 import { getRoundtableAdvancedSettings } from './advanced_settings.js';
 import { getSettings } from './settings.js';
-import { getGameTimeContext, recordDialogueInteraction } from './game_state.js';
+import { addAffinity, getGameTimeContext, recordDialogueInteraction } from './game_state.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
 import {
     buildDeepSeekIntimateUserMessage,
@@ -1778,6 +1778,9 @@ async function processNextEvent() {
         });
         updateSpeakerStats(speaker.id);
         if (message?.text) recordDialogueInteraction('bar', message.text);
+        if (message?.text && speaker.id === 'fritia' && message.targetId === PLAYER_ID) {
+            addAffinity(1);
+        }
         if (message?.text) clearRoundtableBug();
         handlePostBotEvent(event, speaker, payload);
         debugRoundtable('request success', {

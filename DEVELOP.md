@@ -132,7 +132,7 @@ npm run dev
 - `animate()`：主循环。更新游戏时间、控制器、角色、门动画、房间作用域、窗户天空色、交互提示、暖调闲聚准入浮窗投影并渲染场景。
 - 开局欢迎闸门：加载完成但玩家尚未点击 `#click-to-play` 前，角色只保留眨眼，不切换 waypoint、不随机移动；首次点击后先执行面向玩家镜头的挥手欢迎，挥手结束再恢复正常行动。
 - `updateInteractionPrompt()`：复用 `#painting-prompt` 和 `#interaction-prompt` 显示当前可用交互；造梦家具显示 `按 E 管理 [家具名]`；暖调闲聚准入浮窗显示时改为 `按 E 关闭`。
-- 暖调闲聚舞台：看向 `BarDanceInvisiblePlane` 时显示 `按 E 观看跳舞`，打开 `#dance-panel`；舞蹈流程中 `updateDanceSystem(delta)` 接管 VMD 动作，暂停角色日常 AI，但玩家移动/视角仍由 `controls.js` 正常更新。
+- 暖调闲聚舞台：看向 `BarDanceInvisiblePlane` 时显示 `按 E 观看跳舞`，打开 `#dance-panel`；舞蹈流程中 `updateDanceSystem(delta)` 接管 VMD 动作，暂停角色日常 AI，但玩家移动/视角仍由 `controls.js` 正常更新。每完整观看一次跳舞会通过 `recordDanceWatched()` 记录观看次数并增加 `3` 点好感，选择“再来一次”并再次跳完整段也会另计一次。
 - 暖调闲聚调酒：看向 `BarBartendingChallengeInvisibleBox` 时显示 `按 E 请琴诺帮忙调酒`，打开 `#bartending-challenge-panel` 并释放控制模式；Escape 或关闭按钮退出并派发 `fritia-overlay-closed`。
 - 暖调闲聚圆桌密语：看向 `BarRoundtableWhispersInvisibleBox1/2` 时显示 `按 E 加入圆桌密语`，打开 `#roundtable-whispers-panel` 并释放控制模式；面板关闭或离开酒吧时会清空圆桌请求队列并中断当前 LLM 请求。
 - 进入暖调闲聚时 `#fade-overlay.is-bar-loading` 会显示全屏流星加载特效、底部进度条 `#bar-loading-progress` 和状态文案 `#bar-loading-text`；地图加载使用 PMX 真实 progress，访客加载使用阶段进度。
@@ -149,7 +149,7 @@ npm run dev
 - `refreshActiveHistoryTab()`：打开历史对话浮层时按当前激活栏目刷新内容，确保停留在“暖调闲聚”页后再次打开也能看到最新访客/酒吧对话。
 - `enterBarScene()` / `exitBarScene()`：通过黑屏转场进入/离开暖调闲聚；切换旧房间组显示、scene background/fog、玩家碰撞体和芙提雅导航作用域。
 - `exitBarScene()` 会强制关闭圆桌密语并取消 overlay 自动恢复控制标记，避免转场结束后旧面板状态抢回 Pointer Lock。
-- `enterBarScene()` 成功切入暖调闲聚后循环播放 `src/_voices/bar_bgm_min.mp3`，音量约 `0.28` 并淡入；`exitBarScene()` 淡出并停止该 BGM。
+- `enterBarScene()` 成功切入暖调闲聚后循环播放 `src/_voices/bar_bgm_min.mp3`，目标音量约 `0.7` 并淡入；`exitBarScene()` 淡出并停止该 BGM。舞蹈流程如果播放舞蹈 BGM，会通过 `pauseBarBgmForDance()` 淡出并暂停大厅 BGM，舞蹈流程真正结束后再由 `resumeBarBgmAfterDance()` 从原播放位置淡入恢复。
 - `exitBarScene()` 在舞蹈流程未结束前会被拦截；出口提示保留但置灰且不携带 `data-prompt-key`，避免点击或按 E 触发返回。
 - `exportData()`：导出设置、游戏状态、日常对话、约会对话、成就、礼物、造梦家具、挂画。
 - `handleImportFile(e)`：导入 JSON，兼容旧存档，导入后刷新 HUD、成就、礼物、造梦家具。
@@ -381,6 +381,7 @@ LLM JSON 协议：
 - 预算充足且概率命中时，bot 回复后可追加自然 follow-up，默认概率约 `55%`；显式点名队列优先于随机 follow-up，只要未触发硬预算、API 错误或互聊上限，就不会被概率分支吞掉。
 - bot-to-bot 互聊链可由系统主动 follow-up 或 bot 正文点名其他成员启动；互聊链启动后，模型过早输出 `handoff_to_player` 会被本地延后；默认互聊上限为 `3` 时，通常第 `2~3` 轮才会交还话题。达到上限前最后一轮会被本地强制为 handoff，让该轮主动把话题交还给分析员。
 - idle 主动发言只在面板打开、仍在酒吧、已开启 idle、长时间无对话且预算允许时触发，默认间隔约 `45s`。
+- 芙提雅在圆桌密语中成功发送面向 `@分析员` 的 bot 消息时，好感度 `+1`；芙提雅面向其他成员的回复不增加好感。
 - 3 分钟滑动窗口预算：总调用 soft/hard 约为 `16/22`，粗略 token soft/hard 约为 `42000/68000`，soft limit 后禁用 idle/follow-up，idle 调用上限约 `3`。本地阻塞、冷却等待和 API 错误会在 console 输出 `[Roundtable]` / `[Roundtable][blocked]` / `[Roundtable][api-error]` 日志，便于区分本地调度限制和服务端错误。
 - 遇到 `429/rate limit/too many requests` 会临时拉长冷却，并在状态栏提示“圆桌稍微放慢了语速”。
 - 面板关闭、离开酒吧、设置缺失或预算超限时会清空队列、清空低优先级候选并 abort 当前请求。
@@ -523,7 +524,7 @@ localStorage key：`fritia_game_state`
 - `addMoney(amount, reason)`：增加数据金，HUD 可显示 `+amount`。
 - `recordGiftEstimate(amount)` / `recordDialogueInteraction(type, assistantText, locationId)` / `recordModelUsed(path)` / `recordHeadPat()`：统计数据。
 - `recordDreamFurnitureRevision(count)`：记录单件造梦家具已确认的最大样式修改次数，用于“完美主义”成就。
-- `recordSleepModeEntered()` / `recordDanceWatched()` / `recordBartendingChallengeWin()`：分别记录睡眠模式进入次数、暖调闲聚舞蹈完整观看次数和琴诺调酒挑战胜利次数。
+- `recordSleepModeEntered()` / `recordDanceWatched()` / `recordBartendingChallengeWin()`：分别记录睡眠模式进入次数、暖调闲聚舞蹈完整观看次数和琴诺调酒挑战胜利次数；`recordDanceWatched()` 每次完整观看跳舞还会增加 `3` 点好感。
 - `getBarAdmissionProgress()`：返回暖调闲聚入场券任务进度；任务为 3 次日常对话、1 次约会、1 次睡觉模式、1 件已送礼物和 1 件造梦家具。
 - `addGift(gift)` / `getGifts()` / `mergeGifts(gifts)`：礼物库存。
 - `exportGameState()` / `importGameState(data, options)`：存档导入导出。
@@ -532,6 +533,7 @@ localStorage key：`fritia_game_state`
 
 - 旧存档缺少 `stats`、`gifts`、`dreamFurniture` 等字段时使用默认值。
 - `readDreamFurnitureSnapshot()` 会读取 `fritia_dream_furniture` 快照，方便导出兼容。
+- `stats` 包含 `lastMoneySpentGameMinute` 和 `lastDateDialogueGameMinute`，用于“一毛不拔”“资深宅友”从上次花费数据金/上次约会对话后连续 10 天的补达成判定；旧存档缺少字段但已有累计花费或约会记录时，会以导入/加载时的游戏时间作为保守补齐点。
 - `stats` 新增 `sleepModeCount`、`danceWatchCount`、`bartendingChallengeWins`；初始化时会从现有日常/约会历史折算对话统计，导入旧存档时按最大值合并。
 
 ## 设置系统：`js/settings.js`
@@ -764,6 +766,7 @@ localStorage key：`fritia_achievements`
 - “布置爱巢”位于“比翼双飞”后方，读取 `fritia_dream_furniture` 当前记录数，造梦空间内自制家具达到 `5` 件时解锁，图标 `src/_logos/ach_dream_love_nest.svg`。
 - “完美主义”位于“布置爱巢”后方，读取家具记录的 `revisionCount` 和 `stats.maxDreamFurnitureRevisionCount`，同一件造梦家具确认样式修改达到 `3` 次时解锁，图标 `src/_logos/ach_dream_perfectionist.svg`。
 - “华丽入场”“霓裳羽衣”“安全撤离”位于“干什么！”后方；分别读取暖调闲聚入场券任务完成数、`stats.danceWatchCount` 和 `stats.bartendingChallengeWins`，图标分别为 `src/_logos/ach_bar_admission_ticket.svg`、`src/_logos/ach_neon_dancer.svg`、`src/_logos/ach_safe_evacuate.svg`。
+- “一毛不拔”和“资深宅友”不再只检查游戏前 10 天，而是分别读取 `stats.lastMoneySpentGameMinute`、`stats.lastDateDialogueGameMinute`，从上次花费数据金/上次约会对话后连续 10 天未触发对应行为即可解锁。
 
 ## 造梦系统总览
 

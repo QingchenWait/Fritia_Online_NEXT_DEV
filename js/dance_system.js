@@ -29,6 +29,7 @@ const state = {
     helper: null,
     helperMesh: null,
     mode: 'idle',
+    ambientPausedForAudio: false,
     elapsed: 0,
     duration: 0,
     danceCoordinate: null,
@@ -354,6 +355,7 @@ export function finishDanceFlow() {
     clearChoiceTimer();
     hideChoiceBar();
     stopAudio();
+    resumeAmbientAfterDanceAudio();
     prepareRawDanceCoordinates();
     lockDanceScale();
     removeHelperObject();
@@ -529,8 +531,10 @@ function startAudio() {
     }
     state.audio.volume = 0.82;
     state.audio.currentTime = 0;
+    pauseAmbientForDanceAudio();
     state.audio.play().catch((err) => {
         console.warn('[DanceSystem] audio playback was blocked or failed:', err);
+        resumeAmbientAfterDanceAudio();
     });
 }
 
@@ -547,6 +551,18 @@ function releaseAudioUrl() {
         URL.revokeObjectURL(state.audioUrl);
         state.audioUrl = null;
     }
+}
+
+function pauseAmbientForDanceAudio() {
+    if (state.ambientPausedForAudio) return;
+    state.ambientPausedForAudio = true;
+    state.options.onDanceAudioStart?.();
+}
+
+function resumeAmbientAfterDanceAudio() {
+    if (!state.ambientPausedForAudio) return;
+    state.ambientPausedForAudio = false;
+    state.options.onDanceAudioFinished?.();
 }
 
 function removeHelperObject() {

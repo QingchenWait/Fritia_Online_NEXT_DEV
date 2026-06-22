@@ -11,6 +11,8 @@ import { getConversationHistory } from './dialogue.js';
 import { getDateConversationHistory, getDateLocations } from './date_dialogue.js';
 
 const STORAGE_KEY = 'fritia_achievements';
+const DAY_MINUTES = 24 * 60;
+const TEN_DAY_STREAK_MINUTES = 10 * DAY_MINUTES;
 
 const ACHIEVEMENTS = [
     {
@@ -160,22 +162,22 @@ const ACHIEVEMENTS = [
     {
         id: 'no_spending_10_days',
         title: '一毛不拔',
-        desc: '游戏时间的前 10 天里未花费任何数据金。',
+        desc: '连续 10 天未花费任何数据金。',
         hidden: true,
         icon: 'src/_logos/ach_no_entry.svg',
-        target: 1,
-        progress: () => getFirstTenDaysPassed() && getStats().moneySpent <= 0 ? 1 : 0,
-        complete: () => getFirstTenDaysPassed() && getStats().moneySpent <= 0
+        target: 10,
+        progress: () => getStreakDaysSince('lastMoneySpentGameMinute'),
+        complete: () => hasTenDayStreakSince('lastMoneySpentGameMinute')
     },
     {
         id: 'homebody_10_days',
         title: '资深宅友',
-        desc: '游戏时间的前 10 天里未在约会模式进行任何对话。',
+        desc: '连续 10 天未在约会模式进行任何对话。',
         hidden: true,
         icon: 'src/_logos/ach_house.svg',
-        target: 1,
-        progress: () => getFirstTenDaysPassed() && getStats().dateUserMessages <= 0 && getStats().dateBotMessages <= 0 ? 1 : 0,
-        complete: () => getFirstTenDaysPassed() && getStats().dateUserMessages <= 0 && getStats().dateBotMessages <= 0
+        target: 10,
+        progress: () => getStreakDaysSince('lastDateDialogueGameMinute'),
+        complete: () => hasTenDayStreakSince('lastDateDialogueGameMinute')
     },
     {
         id: 'luxury_custom',
@@ -470,8 +472,22 @@ function getMaxDreamFurnitureRevisionCount() {
     return Math.max(recordMax, Math.round(Number(getStats().maxDreamFurnitureRevisionCount) || 0));
 }
 
-function getFirstTenDaysPassed() {
-    return getGameTimeInfo({ quantize: 1 }).dayIndex >= 10;
+function getCurrentGameMinutes() {
+    return Math.max(0, Math.round(Number(getGameTimeInfo({ quantize: 1 }).totalMinutes) || 0));
+}
+
+function getStreakMinutesSince(statsKey) {
+    const stats = getStats();
+    const lastEventMinute = Math.max(0, Math.round(Number(stats?.[statsKey]) || 0));
+    return Math.max(0, getCurrentGameMinutes() - lastEventMinute);
+}
+
+function getStreakDaysSince(statsKey) {
+    return Math.min(10, Math.floor(getStreakMinutesSince(statsKey) / DAY_MINUTES));
+}
+
+function hasTenDayStreakSince(statsKey) {
+    return getStreakMinutesSince(statsKey) >= TEN_DAY_STREAK_MINUTES;
 }
 
 function loadAchievementState() {

@@ -159,6 +159,8 @@ let isBarSceneActive = false;
 let barTransitionInProgress = false;
 let barBgm = null;
 let barBgmFadeTimer = null;
+let barBgmResumeAfterDance = false;
+const BAR_BGM_TARGET_VOLUME = 0.7;
 let previousSceneFog = null;
 let previousSceneBackground = null;
 let hasStoredRoomAtmosphere = false;
@@ -466,6 +468,8 @@ async function init() {
         onDanceStart: (stagePose) => {
             if (isBarSceneActive) poseBarGuestsForDance(stagePose);
         },
+        onDanceAudioStart: pauseBarBgmForDance,
+        onDanceAudioFinished: resumeBarBgmAfterDance,
         onDanceFinished: restoreCharacterAfterDance
     });
     initBarGuestSystem({
@@ -2168,15 +2172,14 @@ function startBarBgm() {
     }
     barBgm.currentTime = barBgm.currentTime || 0;
     barBgm.play().then(() => {
-        const targetVolume = 0.7;
         barBgmFadeTimer = setInterval(() => {
             if (!barBgm) {
                 clearInterval(barBgmFadeTimer);
                 barBgmFadeTimer = null;
                 return;
             }
-            barBgm.volume = Math.min(targetVolume, barBgm.volume + 0.035);
-            if (barBgm.volume >= targetVolume) {
+            barBgm.volume = Math.min(BAR_BGM_TARGET_VOLUME, barBgm.volume + 0.035);
+            if (barBgm.volume >= BAR_BGM_TARGET_VOLUME) {
                 clearInterval(barBgmFadeTimer);
                 barBgmFadeTimer = null;
             }
@@ -2187,6 +2190,7 @@ function startBarBgm() {
 }
 
 function stopBarBgm({ fade = true } = {}) {
+    barBgmResumeAfterDance = false;
     if (barBgmFadeTimer) {
         clearInterval(barBgmFadeTimer);
         barBgmFadeTimer = null;
@@ -2213,6 +2217,59 @@ function stopBarBgm({ fade = true } = {}) {
             barBgmFadeTimer = null;
         }
     }, 70);
+}
+
+function pauseBarBgmForDance() {
+    if (!barBgm || barBgm.paused) {
+        barBgmResumeAfterDance = false;
+        return;
+    }
+    barBgmResumeAfterDance = true;
+    if (barBgmFadeTimer) {
+        clearInterval(barBgmFadeTimer);
+        barBgmFadeTimer = null;
+    }
+    barBgmFadeTimer = setInterval(() => {
+        if (!barBgm) {
+            clearInterval(barBgmFadeTimer);
+            barBgmFadeTimer = null;
+            return;
+        }
+        barBgm.volume = Math.max(0, barBgm.volume - 0.045);
+        if (barBgm.volume <= 0.001) {
+            barBgm.pause();
+            barBgm.volume = 0;
+            clearInterval(barBgmFadeTimer);
+            barBgmFadeTimer = null;
+        }
+    }, 70);
+}
+
+function resumeBarBgmAfterDance() {
+    if (!barBgmResumeAfterDance) return;
+    barBgmResumeAfterDance = false;
+    if (!barBgm || !isBarSceneActive) return;
+    if (barBgmFadeTimer) {
+        clearInterval(barBgmFadeTimer);
+        barBgmFadeTimer = null;
+    }
+    barBgm.volume = Math.max(0, barBgm.volume || 0);
+    barBgm.play().then(() => {
+        barBgmFadeTimer = setInterval(() => {
+            if (!barBgm) {
+                clearInterval(barBgmFadeTimer);
+                barBgmFadeTimer = null;
+                return;
+            }
+            barBgm.volume = Math.min(BAR_BGM_TARGET_VOLUME, barBgm.volume + 0.035);
+            if (barBgm.volume >= BAR_BGM_TARGET_VOLUME) {
+                clearInterval(barBgmFadeTimer);
+                barBgmFadeTimer = null;
+            }
+        }, 80);
+    }).catch((err) => {
+        console.warn('[BarScene] BGM resume after dance was blocked or failed:', err);
+    });
 }
 
 async function enterSleepMode() {

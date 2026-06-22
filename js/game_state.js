@@ -35,6 +35,7 @@ function saveState() {
 function createDefaultStats() {
     return {
         moneySpent: 0,
+        lastMoneySpentGameMinute: 0,
         fiveStarGiftCount: 0,
         maxGiftEstimate: 0,
         dailyUserMessages: 0,
@@ -43,6 +44,7 @@ function createDefaultStats() {
         barBotMessages: 0,
         dateUserMessages: 0,
         dateBotMessages: 0,
+        lastDateDialogueGameMinute: 0,
         dateInteractionLocations: [],
         usedModelPaths: [DEFAULT_MODELS[0]],
         smallTeacherStartsWithGanShenme: 0,
@@ -54,19 +56,32 @@ function createDefaultStats() {
     };
 }
 
-function normalizeStats(data = {}) {
+function normalizeStats(data = {}, context = {}) {
     const defaults = createDefaultStats();
     const list = (value) => Array.isArray(value) ? value.filter(Boolean).map(String) : [];
+    const currentGameMinute = Math.max(0, Math.round(Number(context.gameMinutes ?? state.gameMinutes) || 0));
+    const hasOwn = (key) => Object.prototype.hasOwnProperty.call(data || {}, key);
+    const moneySpent = Math.max(0, Math.round(Number(data.moneySpent) || 0));
+    const dateUserMessages = Math.max(0, Math.round(Number(data.dateUserMessages) || 0));
+    const dateBotMessages = Math.max(0, Math.round(Number(data.dateBotMessages) || 0));
+    const lastMoneySpentGameMinute = hasOwn('lastMoneySpentGameMinute')
+        ? Math.max(0, Math.round(Number(data.lastMoneySpentGameMinute) || 0))
+        : (moneySpent > 0 ? currentGameMinute : 0);
+    const lastDateDialogueGameMinute = hasOwn('lastDateDialogueGameMinute')
+        ? Math.max(0, Math.round(Number(data.lastDateDialogueGameMinute) || 0))
+        : (dateUserMessages > 0 || dateBotMessages > 0 ? currentGameMinute : 0);
     return {
-        moneySpent: Math.max(0, Math.round(Number(data.moneySpent) || 0)),
+        moneySpent,
+        lastMoneySpentGameMinute,
         fiveStarGiftCount: Math.max(0, Math.round(Number(data.fiveStarGiftCount) || 0)),
         maxGiftEstimate: Math.max(0, Math.round(Number(data.maxGiftEstimate) || 0)),
         dailyUserMessages: Math.max(0, Math.round(Number(data.dailyUserMessages) || 0)),
         dailyBotMessages: Math.max(0, Math.round(Number(data.dailyBotMessages) || 0)),
         barUserMessages: Math.max(0, Math.round(Number(data.barUserMessages) || 0)),
         barBotMessages: Math.max(0, Math.round(Number(data.barBotMessages) || 0)),
-        dateUserMessages: Math.max(0, Math.round(Number(data.dateUserMessages) || 0)),
-        dateBotMessages: Math.max(0, Math.round(Number(data.dateBotMessages) || 0)),
+        dateUserMessages,
+        dateBotMessages,
+        lastDateDialogueGameMinute,
         dateInteractionLocations: [...new Set(list(data.dateInteractionLocations))],
         usedModelPaths: [...new Set([...defaults.usedModelPaths, ...list(data.usedModelPaths)])],
         smallTeacherStartsWithGanShenme: Math.max(0, Math.round(Number(data.smallTeacherStartsWithGanShenme) || 0)),
@@ -116,7 +131,9 @@ function loadState() {
                 ? Math.max(0, Math.floor(Number(data.lastSalaryDay)))
                 : Math.floor((Number.isFinite(gameMinutes) ? gameMinutes : INITIAL_GAME_MINUTES) / DAY_MINUTES),
             gifts,
-            stats: normalizeStats(data.stats)
+            stats: normalizeStats(data.stats, {
+                gameMinutes: Number.isFinite(gameMinutes) ? Math.max(0, gameMinutes) : INITIAL_GAME_MINUTES
+            })
         };
     } catch {}
 }
@@ -288,6 +305,7 @@ export function recordDialogueInteraction(type, assistantText = '', locationId =
     if (type === 'date') {
         state.stats.dateUserMessages += 1;
         state.stats.dateBotMessages += 1;
+        state.stats.lastDateDialogueGameMinute = Math.max(0, Math.round(Number(state.gameMinutes) || 0));
         if (locationId && !state.stats.dateInteractionLocations.includes(locationId)) {
             state.stats.dateInteractionLocations.push(locationId);
         }
@@ -338,8 +356,12 @@ export function recordSleepModeEntered() {
 
 export function recordDanceWatched() {
     state.stats.danceWatchCount += 1;
+    state.affinity += 3;
     saveState();
     dispatchStatsUpdated();
+    document.dispatchEvent(new CustomEvent('fritia-affinity-updated', {
+        detail: { delta: 3, value: state.affinity }
+    }));
 }
 
 export function recordBartendingChallengeWin() {
@@ -409,8 +431,10 @@ export function canAfford(amount) {
 export function spendMoney(amount) {
     const value = Math.max(0, Math.round(amount));
     if (state.money < value) return false;
+    if (value <= 0) return true;
     state.money -= value;
     state.stats.moneySpent += value;
+    state.stats.lastMoneySpentGameMinute = Math.max(0, Math.round(Number(state.gameMinutes) || 0));
     saveState();
     dispatchStatsUpdated();
     return true;
@@ -528,7 +552,9 @@ export function importGameState(data, options = {}) {
         ? source.gifts
         : (Array.isArray(data.gifts) ? data.gifts : []);
     const giftsAdded = mergeGifts(gifts);
-    state.stats = mergeStats(state.stats, normalizeStats(source.stats || data.stats));
+    state.stats = mergeStats(state.stats, normalizeStats(source.stats || data.stats, {
+        gameMinutes: state.gameMinutes
+    }));
     deriveStatsFromCurrentData();
     saveState();
     if (!options.suppressEvent) {
@@ -540,6 +566,7 @@ export function importGameState(data, options = {}) {
 function mergeStats(current, imported) {
     return {
         moneySpent: Math.max(current.moneySpent, imported.moneySpent),
+        lastMoneySpentGameMinute: Math.max(current.lastMoneySpentGameMinute || 0, imported.lastMoneySpentGameMinute || 0),
         fiveStarGiftCount: Math.max(current.fiveStarGiftCount, imported.fiveStarGiftCount),
         maxGiftEstimate: Math.max(current.maxGiftEstimate, imported.maxGiftEstimate),
         dailyUserMessages: Math.max(current.dailyUserMessages, imported.dailyUserMessages),
@@ -548,6 +575,7 @@ function mergeStats(current, imported) {
         barBotMessages: Math.max(current.barBotMessages, imported.barBotMessages),
         dateUserMessages: Math.max(current.dateUserMessages, imported.dateUserMessages),
         dateBotMessages: Math.max(current.dateBotMessages, imported.dateBotMessages),
+        lastDateDialogueGameMinute: Math.max(current.lastDateDialogueGameMinute || 0, imported.lastDateDialogueGameMinute || 0),
         dateInteractionLocations: [...new Set([...current.dateInteractionLocations, ...imported.dateInteractionLocations])],
         usedModelPaths: [...new Set([...current.usedModelPaths, ...imported.usedModelPaths])],
         smallTeacherStartsWithGanShenme: Math.max(current.smallTeacherStartsWithGanShenme, imported.smallTeacherStartsWithGanShenme),
@@ -564,6 +592,8 @@ function deriveStatsFromCurrentData() {
     const fiveStarCount = state.gifts.filter(gift => Number(gift.score) >= 5).length;
     state.stats.fiveStarGiftCount = Math.max(state.stats.fiveStarGiftCount, fiveStarCount);
     deriveDialogueStatsFromLocalHistory();
+    state.stats.lastMoneySpentGameMinute = Math.max(0, Math.round(Number(state.stats.lastMoneySpentGameMinute) || 0));
+    state.stats.lastDateDialogueGameMinute = Math.max(0, Math.round(Number(state.stats.lastDateDialogueGameMinute) || 0));
     state.stats.sleepModeCount = Math.max(0, Math.round(Number(state.stats.sleepModeCount) || 0));
     state.stats.danceWatchCount = Math.max(0, Math.round(Number(state.stats.danceWatchCount) || 0));
     state.stats.bartendingChallengeWins = Math.max(0, Math.round(Number(state.stats.bartendingChallengeWins) || 0));
