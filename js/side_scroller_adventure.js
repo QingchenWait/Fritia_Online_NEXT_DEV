@@ -1,3 +1,12 @@
+import {
+    advanceSideScrollerCombatDistance,
+    closeSideScrollerCombat,
+    initSideScrollerCombat,
+    isSideScrollerCombatMovementBlocked,
+    openSideScrollerCombat,
+    updateSideScrollerCombat
+} from './side_scroller_combat.js?v=20260623-side-combat';
+
 const PANEL_ID = 'side-scroller-adventure';
 const CANVAS_ID = 'side-scroller-canvas';
 const ASSET_BASE = 'src/_2d_adventure/2d_fritia/';
@@ -49,6 +58,7 @@ const state = {
     stopBlend: 0,
     fireOffsetX: FIRE_COMPANION.backOffsetX,
     snowClock: 0,
+    lastFireScreenPosition: { x: 0, y: 0 },
     dpr: 1,
     width: 1,
     height: 1
@@ -106,6 +116,11 @@ export function initSideScrollerAdventure({ controlsModule } = {}) {
     }
 
     bindEvents();
+    initSideScrollerCombat({
+        panel: state.panel,
+        getFacing: () => state.facing,
+        getFireScreenPosition: () => ({ ...state.lastFireScreenPosition })
+    });
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('orientationchange', resizeCanvas);
@@ -125,10 +140,12 @@ export function openSideScrollerAdventure() {
     state.stopBlend = 0;
     state.fireOffsetX = FIRE_COMPANION.backOffsetX;
     state.snowClock = 0;
+    state.lastFireScreenPosition = { x: 0, y: 0 };
     resizeCanvas();
     state.panel.classList.remove('hidden');
     document.body.classList.add('side-scroller-active');
     state.controlsModule?.releaseControlMode?.({ resumeOnClose: true });
+    openSideScrollerCombat();
     render();
 }
 
@@ -137,6 +154,7 @@ export function closeSideScrollerAdventure() {
     state.visible = false;
     state.inputLeft = false;
     state.inputRight = false;
+    closeSideScrollerCombat();
     state.panel.classList.add('hidden');
     document.body.classList.remove('side-scroller-active');
     document.dispatchEvent(new CustomEvent('fritia-overlay-closed', { detail: { id: PANEL_ID } }));
@@ -148,11 +166,14 @@ export function isSideScrollerAdventureVisible() {
 
 export function updateSideScrollerAdventure(delta) {
     if (!state.visible) return;
-    const direction = Number(state.inputRight) - Number(state.inputLeft);
+    const rawDirection = Number(state.inputRight) - Number(state.inputLeft);
+    const direction = isSideScrollerCombatMovementBlocked() ? 0 : rawDirection;
     const dt = Math.max(0, delta);
     if (direction !== 0) {
         state.facing = direction > 0 ? 1 : -1;
-        state.playerWorldX += direction * 285 * dt;
+        const movement = direction * 285 * dt;
+        state.playerWorldX += movement;
+        if (movement > 0) advanceSideScrollerCombatDistance(movement);
         state.walkClock += dt * 7.4;
         state.walkBlend = approach(state.walkBlend, 1, dt * 7.5);
         state.stopBlend = 0;
@@ -166,6 +187,7 @@ export function updateSideScrollerAdventure(delta) {
     const targetFireOffsetX = FIRE_COMPANION.backOffsetX * state.facing;
     state.fireOffsetX += (targetFireOffsetX - state.fireOffsetX) * (1 - Math.exp(-FIRE_COMPANION.followSpeed * dt));
     state.snowClock += dt;
+    updateSideScrollerCombat(dt);
     render();
 }
 
@@ -198,7 +220,16 @@ function bindEvents() {
     bindHoldButton('side-scroller-right', 'right');
 
     document.addEventListener('keydown', (event) => {
-        if (!state.visible || event.repeat) return;
+        if (!state.visible) return;
+        if (isEditableEventTarget(event.target)) {
+            if (event.code === 'Escape') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                closeSideScrollerAdventure();
+            }
+            return;
+        }
+        if (event.repeat) return;
         event.stopImmediatePropagation();
         if (event.code === 'Escape') {
             event.preventDefault();
@@ -216,6 +247,7 @@ function bindEvents() {
 
     document.addEventListener('keyup', (event) => {
         if (!state.visible) return;
+        if (isEditableEventTarget(event.target)) return;
         event.stopImmediatePropagation();
         if (event.code === 'KeyA' || event.code === 'ArrowLeft') {
             event.preventDefault();
@@ -230,6 +262,12 @@ function bindEvents() {
         state.inputLeft = false;
         state.inputRight = false;
     });
+}
+
+function isEditableEventTarget(target) {
+    const element = target instanceof Element ? target : null;
+    if (!element) return false;
+    return Boolean(element.closest('input, textarea, select, [contenteditable="true"]'));
 }
 
 function bindHoldButton(id, side) {
@@ -440,6 +478,11 @@ function drawFritia(ctx, w, h) {
     const frontLegAngle = -4 + stride * 14 - settle * 4;
     const backLegAngle = 4 + counter * 12 + settle * 4;
     const armAngle = ARM_SHOULDER_ANCHOR.idleAngle + counter * ARM_SHOULDER_ANCHOR.swingAngle;
+    const fireFloatY = Math.sin(state.snowClock * FIRE_COMPANION.floatSpeed) * FIRE_COMPANION.floatAmplitude;
+    state.lastFireScreenPosition = {
+        x: x + state.fireOffsetX * scale,
+        y: groundY - bob + (FIRE_COMPANION.anchorY + fireFloatY) * scale
+    };
 
     ctx.save();
     ctx.translate(x, groundY - bob);
@@ -452,7 +495,7 @@ function drawFritia(ctx, w, h) {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    drawFireCompanion(ctx, scale);
+    drawFireCompanion(ctx, scale, fireFloatY);
     drawAnchoredImage(ctx, state.images.legBack, 18, -262, 0.47, 0.05, backLegAngle, scale, 0.72, 0.98);
     drawAnchoredImage(ctx, state.images.legFront, -18, -264, 0.5, 0.05, frontLegAngle, scale, 1, 1);
     drawAnchoredImage(ctx, state.images.body, BODY_ANCHOR.x, BODY_ANCHOR.y, BODY_ANCHOR.pivotX, BODY_ANCHOR.pivotY, lean, scale, 1, 1);
@@ -471,10 +514,9 @@ function drawFritia(ctx, w, h) {
     ctx.restore();
 }
 
-function drawFireCompanion(ctx, scale) {
+function drawFireCompanion(ctx, scale, floatY) {
     const img = state.images.fire;
     if (!img) return;
-    const floatY = Math.sin(state.snowClock * FIRE_COMPANION.floatSpeed) * FIRE_COMPANION.floatAmplitude;
     ctx.save();
     ctx.globalAlpha = 0.94;
     ctx.translate(state.fireOffsetX * state.facing * scale, (FIRE_COMPANION.anchorY + floatY) * scale);

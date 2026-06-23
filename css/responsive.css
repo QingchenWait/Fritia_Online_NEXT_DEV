@@ -88,6 +88,95 @@
     }
 }
 
+@media (max-width: 600px) {
+    .side-combat-statusbar {
+        top: 64px;
+        left: 12px;
+        right: 12px;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .side-combat-chip,
+    .side-combat-player {
+        min-height: 58px;
+        padding: 9px 10px;
+    }
+    .side-combat-skills {
+        grid-column: 1 / -1;
+    }
+    .side-combat-skills button {
+        min-height: 42px;
+        font-size: 0.74rem;
+    }
+    .side-combat-enemy-layer {
+        top: 37%;
+        left: 12px;
+        right: 12px;
+        justify-content: center;
+        gap: 8px;
+        min-width: 0;
+    }
+    .side-combat-enemy {
+        width: 108px;
+        min-height: 104px;
+        padding: 11px 10px;
+    }
+    .side-combat-enemy--boss {
+        width: 158px;
+        min-height: 118px;
+    }
+    .side-combat-hand {
+        bottom: 120px;
+        width: calc(100vw - 18px);
+        gap: 6px;
+    }
+    .side-combat-card {
+        width: 23vw;
+        min-width: 78px;
+        max-width: 110px;
+        height: 136px;
+        padding: 8px;
+    }
+    .side-combat-card strong {
+        margin-top: 9px;
+        font-size: 1rem;
+    }
+    .side-combat-card small {
+        min-height: 30px;
+        margin-top: 5px;
+        font-size: 0.64rem;
+    }
+    .side-combat-card__top,
+    .side-combat-card__value {
+        font-size: 0.6rem;
+    }
+    .side-combat-log {
+        left: 12px;
+        bottom: 270px;
+        width: calc(100vw - 24px);
+        min-height: 56px;
+        max-height: 94px;
+        overflow: hidden;
+        font-size: 0.68rem;
+    }
+    .side-combat-actions {
+        right: 12px;
+        bottom: 72px;
+    }
+    .side-combat-actions button {
+        min-height: 42px;
+        padding: 0 12px;
+        font-size: 0.72rem;
+    }
+    .side-combat-modal__panel {
+        padding: 18px;
+    }
+    .side-combat-modal textarea {
+        min-height: 96px;
+        font-size: 16px;
+    }
+}
+
 /* ===== 中屏：造梦双栏折叠 ===== */
 @media (max-width: 820px) {
     .dream-grid { grid-template-columns: 1fr; }

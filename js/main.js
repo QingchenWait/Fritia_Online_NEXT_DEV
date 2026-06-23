@@ -48,7 +48,7 @@ import {
     isSideScrollerAdventureVisible,
     openSideScrollerAdventure,
     updateSideScrollerAdventure
-} from './side_scroller_adventure.js';
+} from './side_scroller_adventure.js?v=20260623-side-combat';
 import {
     BAR_ROOM_ID,
     ensureBarScene,

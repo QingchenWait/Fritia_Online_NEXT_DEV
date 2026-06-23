@@ -278,11 +278,13 @@ npm run dev
 
 职责：
 
-- 管理 `#side-scroller-adventure` 全屏 Canvas 场景，不依赖后端、不调用 LLM、不写入存档。
-- 使用 `src/_2d_adventure/2d_fritia/` 下的 `Head/Body/Arm/Arm_Back/Leg_*` PNG 部件在 Canvas 中拼装 2D 芙提雅。
-- 按后腿/后臂、身体、前腿/前臂、头部的层级绘制，并用正弦步态驱动手臂和腿部旋转，支持左右朝向翻转。
+- 管理 `#side-scroller-adventure` 全屏 Canvas 场景，不新增后端、不写入存档。
+- 使用 `src/_2d_adventure/2d_fritia/` 下的 `Simple_Body.png`、`Simple_Arm.png`、`Simple_Leg_Front.png`、`Simple_Leg_Behind.png` 与 `Fire.png` 在 Canvas 中拼装 2D 芙提雅。
+- 按火炬、后腿、前腿、头身、手臂的层级绘制，并用正弦步态驱动腿部旋转和肩点固定的手臂摆动，支持左右朝向翻转。
+- `Fire.png` 火炬始终位于芙提雅身后上下漂浮；芙提雅转身时按缓入缓出追随到背后。
 - 绘制低多边形渐变冰雪世界：天空渐变、飘雪、远近山脉、雪地坡面和冰面裂纹；背景、地面按不同 parallax 系数随玩家移动循环滚动，形成无限左右移动视觉。
 - 场景打开时调用 `controlsModule.releaseControlMode({ resumeOnClose: true })` 释放 3D 控制，关闭时派发 `fritia-overlay-closed` 恢复控制。
+- 集成 `js/side_scroller_combat.js`，战斗/事件/奖励阶段会暂停横板移动，只有向右移动累计前进距离并触发事件。
 
 导出：
 
@@ -298,13 +300,34 @@ npm run dev
 - `#side-scroller-canvas`：2D 渲染画布。
 - `#side-scroller-close`：返回房间按钮。
 - `#side-scroller-left` / `#side-scroller-right`：移动端独立左右移动按钮。
+- `#side-scroller-combat`：横板战斗 HUD 根节点，由 `js/side_scroller_combat.js` 动态挂载到 `#side-scroller-adventure` 内。
+- `#side-combat-style-panel` / `#side-combat-style-input` / `#side-combat-start`：战斗风格输入与开始前进按钮。
+- `#side-combat-enemy-layer`：敌人目标层。
+- `#side-combat-hand`：四张手牌区域，支持点击选择和拖放到目标。
+- `#side-combat-player-panel`：芙提雅生命与自选目标区域。
+- `#side-combat-skill-guard` / `#side-combat-skill-execute`：分析员技能按钮。
+- `#side-combat-refresh` / `#side-combat-refresh-count`：全局卡组刷新按钮与次数。
+- `#side-combat-reward-panel` / `#side-combat-complete-panel`：事件奖励与路线结算面板。
 - `#dream-painting-prompt` 在看向南侧门时复用为 `按 1 进入冰雪横板`。
 
 运行约定：
 
 - 桌面端使用 `A/D` 或方向键移动，`Escape` 返回房间。
 - 移动端显示左右触控按钮；小游戏打开时隐藏原 3D 触控摇杆，避免输入重叠。
-- v1 不保存玩家横板位置，不新增 `localStorage` key，也不进入导出/导入 JSON。
+- v1 不保存玩家横板位置、战斗路线、手牌、生命值和战斗风格，不新增 `localStorage` key，也不进入导出/导入 JSON。
+
+横板战斗：`js/side_scroller_combat.js` / `js/side_scroller_cards_llm.js`
+
+- 进入横板后先输入自由战斗风格；该文本只用于引导 LLM 对 flex 槽位的类别倾向与卡牌命名，不映射本地预设权重。
+- 一条路线共 8 个事件，前 7 个按本地概率生成敌人、补给或稀有信标，第 8 个固定 Boss。
+- 敌人事件数量决定全局卡组刷新次数，规则为 `battleCount + 2`；稀有信标可额外增加 1 次。
+- 每次刷新生成 10 张卡，至少 3 张攻击、2 张治疗；战斗开始时抽 4 张，回合结束或出牌后补到 4 张。
+- 卡牌类别为攻击、治疗、控制、召唤、强化；召唤牌为瞬发，不占用每回合 3 张普通牌上限。
+- 卡牌稀有度本地按蓝 68%、紫 25%、金 7% 生成；数值、目标类型、持续回合和状态效果全部本地计算并 clamp。
+- `js/side_scroller_cards_llm.js` 复用 `settings.js#getSettings()` 的 `apiKey/baseUrl/model` 和 `src/_queries/system_prompt.txt`，调用 OpenAI 兼容 `chat/completions`，支持流式/非流式响应解析。
+- LLM 只允许返回 `{ cards: [{ slotId, category, name, description }] }`；locked 槽位不能改类别，非法 JSON、非法类别、过长文本或无 API 配置都会回退到本地卡牌文本。
+- 分析员技能：`神之守护` 每局 3 次，芙提雅回满血、获得 3 个玩家回合减伤和易伤、敌方下回合沉默；`御驾亲征` 每局 3 次，非 Boss 直接击杀，Boss 生命高于 50% 时不可用。
+- 战斗 UI 只存在于横板 overlay 内，关闭横板后全部运行态丢弃，不影响日常对话、约会、造梦、调酒、圆桌密语和存档导入导出。
 
 ## 舞蹈系统：`js/dance_system.js`
 
@@ -1555,11 +1578,17 @@ Escape：
 
 1. 看向旧房间南侧门时，应同时显示 `按 E 进入暖调闲聚` 和 `按 1 进入冰雪横板`。
 2. 按 `1` 打开 `#side-scroller-adventure`，原 3D 准星/触控摇杆不应继续叠在小游戏输入之上。
-3. `A/D` 和方向键可左右移动，角色朝向随移动方向翻转，身体部件拼装完整且走路摆动可见。
-4. 背景山脉、雪地和近景地面随移动差速循环滚动，左右移动都没有明显断层。
-5. 点击 `#side-scroller-close` 或按 `Escape` 返回房间，并派发 `fritia-overlay-closed` 恢复控制模式。
-6. 移动端显示 `#side-scroller-left` / `#side-scroller-right`，长按移动、松开停止。
-7. 退出小游戏后，旧房间南侧门按 `E` 进入暖调闲聚/显示入场券任务的原逻辑保持不变。
+3. 输入任意战斗风格后点击开始；未配置 API Key 时应使用本地卡牌文本，不阻塞开局。
+4. `A/D` 和方向键可左右移动，角色朝向随移动方向翻转，身体部件拼装完整且走路摆动可见。
+5. 背景山脉、雪地和近景地面随移动差速循环滚动，左右移动都没有明显断层。
+6. 只向右移动累计前进距离；触发战斗、补给、稀有信标或 Boss 时横板移动暂停。
+7. 战斗中点击或拖放卡牌到敌人/芙提雅可结算，攻击、治疗、控制、召唤、强化牌都有可见反馈；召唤牌不消耗普通出牌次数。
+8. `神之守护` 和 `御驾亲征` 各 3 次；Boss 生命高于 50% 时 `御驾亲征` 不应生效。
+9. 全局刷新次数初始为敌人事件数 + 2，点击刷新会重置 10 张卡并消耗次数。
+10. 8 个事件结束后显示路线完成；芙提雅 HP 归零时显示路线中断。
+11. 点击 `#side-scroller-close` 或按 `Escape` 返回房间，并派发 `fritia-overlay-closed` 恢复控制模式。
+12. 移动端显示 `#side-scroller-left` / `#side-scroller-right`，长按移动、松开停止；战斗 HUD 在小屏不遮挡开始/返回按钮。
+13. 退出小游戏后，旧房间南侧门按 `E` 进入暖调闲聚/显示入场券任务的原逻辑保持不变。
 
 暖调闲聚：
 
