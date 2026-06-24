@@ -244,7 +244,7 @@
         transform: translateY(calc(-50% - 2px));
     }
     .side-combat-rule-toggle::after {
-        min-width: 54px;
+        width: 48px;
         font-size: 0.58rem;
     }
     .side-combat.is-started .side-combat-rule-toggle {
@@ -252,6 +252,18 @@
         right: auto;
         top: calc(50% - 166px);
         bottom: auto;
+    }
+    .side-combat-scoreboard-toggle {
+        left: auto;
+        right: 12px;
+        top: calc(50% - 22px);
+        bottom: auto;
+        width: 46px;
+        height: 46px;
+        transform: translateY(-50%);
+    }
+    .side-combat-scoreboard-toggle:hover {
+        transform: translateY(-50%);
     }
     .side-combat-discard {
         left: auto;
@@ -300,6 +312,12 @@
     }
     .side-combat-rule-panel {
         right: 66px;
+        width: calc(100vw - 78px);
+        max-height: calc(100vh - 122px);
+    }
+    .side-combat-scoreboard-panel {
+        right: 66px;
+        top: calc(50% - 22px);
         width: calc(100vw - 78px);
         max-height: calc(100vh - 122px);
     }

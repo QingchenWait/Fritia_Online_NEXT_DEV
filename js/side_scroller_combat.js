@@ -7,6 +7,10 @@ import {
     loadSideScrollerArchive,
     setSideScrollerArchiveEquipped
 } from './side_scroller_archive.js?v=20260624-combat-ui';
+import {
+    addSideScrollerScoreRecord,
+    loadSideScrollerScores
+} from './side_scroller_scores.js?v=20260624-combat-score';
 
 const EVENT_DISTANCE = 560;
 const ENCOUNTER_APPROACH_DISTANCE = 240;
@@ -97,6 +101,13 @@ const CARD_STAGE_VALUE_SCALING = {
     hard: { perStage: 0.075, cap: 1.60 },
     legend: { perStage: 0.055, cap: 1.55 }
 };
+const SCORE_RULES = {
+    normalBase: 120,
+    miniBossBase: 420,
+    bossBase: 760,
+    turnPenalty: 22,
+    minimumRate: 0.35
+};
 const DIFFICULTIES = [
     { id: 'standard', label: '标准', detail: '5 关卡 + 1 BOSS', normalEvents: 5, bossEvents: 1 },
     { id: 'hard', label: '困难', detail: '7 关卡 + 1 BOSS', normalEvents: 7, bossEvents: 1 },
@@ -129,7 +140,9 @@ const state = {
     encounterProgress: 0,
     pendingEvent: null,
     currentBattleEvent: null,
+    battleStartTurn: 0,
     enemyTurnCount: 0,
+    totalEnemyTurns: 0,
     player: createPlayer(),
     enemies: [],
     hand: [],
@@ -150,6 +163,8 @@ const state = {
     ruleDocMarkdown: '',
     ruleDocLoading: false,
     ruleDocError: '',
+    scoreboardOpen: false,
+    scoreRecords: { records: [] },
     archive: { cards: [], equippedIds: [] },
     archiveOpen: false,
     archivePage: 0,
@@ -162,6 +177,11 @@ const state = {
     infoExpanded: true,
     enemyFloatBursts: new Map(),
     playerFloatBursts: { index: 0, at: 0 },
+    score: 0,
+    scoreKills: 0,
+    scoredEnemyIds: new Set(),
+    lastScoreRecord: null,
+    isNewScoreRecord: false,
     busy: false,
     preloading: false,
     preloadedBatch: null,
@@ -191,6 +211,8 @@ export function openSideScrollerCombat() {
     resetCombatState();
     state.visible = true;
     state.root?.classList.remove('hidden');
+    state.root?.classList.remove('is-started', 'is-battle', 'is-loading', 'has-visible-hand');
+    state.panel?.classList.remove('is-side-combat-started', 'is-side-combat-hint-visible');
     renderCombat();
 }
 
@@ -247,7 +269,9 @@ function resetCombatState() {
     state.encounterProgress = 0;
     state.pendingEvent = null;
     state.currentBattleEvent = null;
+    state.battleStartTurn = 0;
     state.enemyTurnCount = 0;
+    state.totalEnemyTurns = 0;
     state.player = createPlayer();
     state.enemies = [];
     state.hand = [];
@@ -264,6 +288,8 @@ function resetCombatState() {
     state.deckPopoverOpen = false;
     state.ruleDocOpen = false;
     state.ruleDocError = '';
+    state.scoreboardOpen = false;
+    state.scoreRecords = loadSideScrollerScores();
     state.archive = loadSideScrollerArchive();
     state.archiveOpen = false;
     state.archivePage = 0;
@@ -276,6 +302,11 @@ function resetCombatState() {
     state.infoExpanded = true;
     state.enemyFloatBursts = new Map();
     state.playerFloatBursts = { index: 0, at: 0 };
+    state.score = 0;
+    state.scoreKills = 0;
+    state.scoredEnemyIds = new Set();
+    state.lastScoreRecord = null;
+    state.isNewScoreRecord = false;
     state.busy = false;
     state.preloading = false;
     state.preloadedBatch = null;
@@ -321,6 +352,7 @@ function ensureDom() {
         <div class="side-combat-route" aria-live="polite">
             <div id="side-combat-route-map" class="side-combat-route__map"></div>
             <strong id="side-combat-progress">事件 0/0</strong>
+            <span id="side-combat-score-live" class="side-combat-score-live">积分 0</span>
         </div>
         <div class="side-combat-statusbar" aria-live="polite">
             <div class="side-combat-skills">
@@ -365,6 +397,11 @@ function ensureDom() {
         <button id="side-combat-rule-toggle" class="side-combat-round side-combat-rule-toggle" type="button" aria-label="打开战术文档" title="打开战术文档">
             <span class="side-combat-round__icon">?</span>
         </button>
+        <button id="side-combat-scoreboard-toggle" class="side-combat-round side-combat-scoreboard-toggle" type="button" aria-label="打开分数记录" title="打开分数记录">
+            <span class="side-combat-round__icon side-combat-round__icon--image" aria-hidden="true">
+                <img src="src/_logos/icon_scoreboard_trophy.svg" alt="">
+            </span>
+        </button>
         <aside id="side-combat-archive" class="side-combat-archive" aria-label="典藏牌库">
             <button id="side-combat-archive-toggle" class="side-combat-round side-combat-archive-toggle" type="button" aria-label="打开典藏牌库" title="打开典藏牌库">
                 <span class="side-combat-archive-db" aria-hidden="true"><i></i></span>
@@ -404,6 +441,16 @@ function ensureDom() {
             </div>
             <div id="side-combat-rule-content" class="side-combat-rule-content"></div>
         </div>
+        <div id="side-combat-scoreboard-panel" class="side-combat-scoreboard-panel hidden" aria-live="polite">
+            <div class="side-combat-scoreboard-panel__head">
+                <div>
+                    <span>SCORE</span>
+                    <strong>分数记录</strong>
+                </div>
+                <button id="side-combat-scoreboard-close" type="button" aria-label="关闭分数记录">×</button>
+            </div>
+            <div id="side-combat-scoreboard-list" class="side-combat-scoreboard-list"></div>
+        </div>
         <div class="side-combat-actions">
             <button id="side-combat-end-turn" type="button">结束回合</button>
         </div>
@@ -438,6 +485,7 @@ function ensureDom() {
         <div id="side-combat-complete-panel" class="side-combat-modal hidden">
             <div class="side-combat-modal__panel side-combat-modal__panel--small">
                 <span id="side-combat-complete-title" class="side-combat-modal__eyebrow">RUN COMPLETE</span>
+                <div id="side-combat-complete-score" class="side-combat-complete-score"></div>
                 <p id="side-combat-complete-text">雪原路线完成。</p>
                 <button id="side-combat-restart" type="button">重新开始</button>
             </div>
@@ -448,6 +496,7 @@ function ensureDom() {
     state.root = root;
     state.els = {
         progress: root.querySelector('#side-combat-progress'),
+        scoreLive: root.querySelector('#side-combat-score-live'),
         routeMap: root.querySelector('#side-combat-route-map'),
         refreshCount: root.querySelector('#side-combat-refresh-count'),
         refreshTag: root.querySelector('#side-combat-refresh-tag'),
@@ -474,6 +523,10 @@ function ensureDom() {
         rulePanel: root.querySelector('#side-combat-rule-panel'),
         ruleClose: root.querySelector('#side-combat-rule-close'),
         ruleContent: root.querySelector('#side-combat-rule-content'),
+        scoreboardToggle: root.querySelector('#side-combat-scoreboard-toggle'),
+        scoreboardPanel: root.querySelector('#side-combat-scoreboard-panel'),
+        scoreboardClose: root.querySelector('#side-combat-scoreboard-close'),
+        scoreboardList: root.querySelector('#side-combat-scoreboard-list'),
         archive: root.querySelector('#side-combat-archive'),
         archiveToggle: root.querySelector('#side-combat-archive-toggle'),
         archiveCount: root.querySelector('#side-combat-archive-count'),
@@ -506,6 +559,7 @@ function ensureDom() {
         continue: root.querySelector('#side-combat-continue'),
         completePanel: root.querySelector('#side-combat-complete-panel'),
         completeTitle: root.querySelector('#side-combat-complete-title'),
+        completeScore: root.querySelector('#side-combat-complete-score'),
         completeText: root.querySelector('#side-combat-complete-text'),
         restart: root.querySelector('#side-combat-restart'),
         tooltip: root.querySelector('#side-combat-tooltip')
@@ -534,6 +588,14 @@ function bindEvents() {
     state.els.ruleClose?.addEventListener('click', event => {
         event.stopPropagation();
         closeRuleDocPanel();
+    });
+    state.els.scoreboardToggle?.addEventListener('click', event => {
+        event.stopPropagation();
+        toggleScoreboardPanel();
+    });
+    state.els.scoreboardClose?.addEventListener('click', event => {
+        event.stopPropagation();
+        closeScoreboardPanel();
     });
     state.els.archiveClose?.addEventListener('click', event => {
         event.stopPropagation();
@@ -569,6 +631,7 @@ function bindEvents() {
         if (!event.target?.closest?.('#side-combat-deck-toggle, .side-combat-tooltip--deck')) closeDeckPopover();
         if (!event.target?.closest?.('#side-combat-archive-panel, #side-combat-archive-toggle')) closeArchivePanel();
         if (!event.target?.closest?.('#side-combat-rule-panel, #side-combat-rule-toggle')) closeRuleDocPanel();
+        if (!event.target?.closest?.('#side-combat-scoreboard-panel, #side-combat-scoreboard-toggle')) closeScoreboardPanel();
     });
     state.root?.addEventListener('pointermove', handleCombatPointerMove);
     state.root?.addEventListener('pointerleave', handleCombatPointerLeave);
@@ -748,6 +811,7 @@ async function startBattle(event) {
     state.pendingEvent = null;
     state.currentBattleEvent = event;
     state.enemyTurnCount = 0;
+    state.battleStartTurn = 0;
     pushLog(isBossEvent(event) ? 'Boss 信号锁定。' : '敌对反应接近。');
     if (!state.hand.length && !state.deck.length) pushLog('当前卡池已空，请使用预加载卡池。');
     else if (state.hand.length < HAND_SIZE && !state.deck.length) pushLog('当前手牌不足，卡池已空。');
@@ -1035,11 +1099,11 @@ async function playCard(card, target) {
     } finally {
         state.busy = false;
     }
+    if (!fromArchive) drawUntilHandSize();
     if (isBattleWon()) {
         finishBattle();
         return;
     }
-    if (!fromArchive) drawUntilHandSize();
     await autoRefreshEmptyCardPool();
     if (state.phase !== 'battle') return;
     if (maybeFailNoDamageOptions()) return;
@@ -1129,6 +1193,7 @@ function applyDamageCard(card, target, effectType) {
     const baseDamage = getEffectiveCardDamageValue(card);
     targets.forEach(enemy => {
         dealDamage(enemy, baseDamage, card, { source: effectType });
+        awardScoreForDeadEnemy(enemy);
         if (card.category === 'summon') addSummonBleed(enemy, baseDamage);
         fireRayToEnemy(enemy.id, { type: effectType, duration: effectType === 'summon' ? 1150 : 860 });
         spawnHitParticlesAtEnemy(enemy.id, effectType);
@@ -1164,6 +1229,7 @@ async function endPlayerTurn(options = {}) {
     renderCombat();
     await wait(260);
     state.enemyTurnCount += 1;
+    state.totalEnemyTurns += 1;
     await resolveBleedBeforeEnemyTurn();
     if (isBattleWon()) {
         finishBattle();
@@ -1300,6 +1366,7 @@ function dealBleedDamage(enemy, rawBleed, options = {}) {
     floatAtEnemy(enemy.id, `-${damage}`, 'bleed');
     spawnHitParticlesAtEnemy(enemy.id, 'bleed');
     shakeEnemy(enemy.id);
+    awardScoreForDeadEnemy(enemy);
     return damage;
 }
 
@@ -1308,6 +1375,50 @@ function getBleedGrowthMultiplier(enemy) {
     if (growthStacks <= 0) return 1;
     const enemyAmplifier = 1 + sumStatusValue(enemy, 'vulnerable') + (computeRuptureMultiplier(enemy) - 1);
     return Math.max(1, (1 + growthStacks * BLEED_GROWTH_PER_STACK) * enemyAmplifier);
+}
+
+function awardScoreForDeadEnemy(enemy) {
+    if (!enemy || isAlive(enemy) || state.scoredEnemyIds.has(enemy.id)) return 0;
+    const gained = computeEnemyScore(enemy);
+    state.scoredEnemyIds.add(enemy.id);
+    state.score += gained;
+    state.scoreKills += 1;
+    floatAtEnemy(enemy.id, `+${gained}`, 'score');
+    pushLog(`${enemy.name}: 击破获得 ${gained} 积分。`);
+    renderProgressOnly();
+    return gained;
+}
+
+function computeEnemyScore(enemy) {
+    const base = getEnemyScoreBase(enemy);
+    const turnsUsed = Math.max(0, state.enemyTurnCount - state.battleStartTurn);
+    const minimum = Math.floor(base * SCORE_RULES.minimumRate);
+    return Math.max(minimum, base - turnsUsed * SCORE_RULES.turnPenalty);
+}
+
+function getEnemyScoreBase(enemy) {
+    if (enemy?.boss && enemy?.miniBoss) return SCORE_RULES.miniBossBase;
+    if (enemy?.boss) return SCORE_RULES.bossBase;
+    return SCORE_RULES.normalBase;
+}
+
+function finalizeRunScore() {
+    if (state.lastScoreRecord || state.score <= 0) return;
+    const difficulty = currentDifficulty();
+    const result = addSideScrollerScoreRecord({
+        score: state.score,
+        difficulty: difficulty.id,
+        difficultyLabel: difficulty.label,
+        eventsCleared: state.eventIndex,
+        kills: state.scoreKills,
+        turns: state.totalEnemyTurns,
+        completedAt: Date.now()
+    });
+    if (result.ok) {
+        state.lastScoreRecord = result.record;
+        state.isNewScoreRecord = result.isNewRecord;
+        state.scoreRecords = result.scores;
+    }
 }
 
 function computeRuptureMultiplier(enemy) {
@@ -1419,6 +1530,7 @@ function getEquippedArchiveCards() {
 }
 
 function finishBattle() {
+    state.enemies.forEach(enemy => awardScoreForDeadEnemy(enemy));
     closeStatusPopover();
     clearActiveArchiveCard();
     state.phase = 'reward';
@@ -1459,7 +1571,9 @@ function completeRun(victory) {
     state.enemyTurnCount = 0;
     state.els.rewardPanel?.classList.add('hidden');
     state.els.completePanel?.classList.remove('hidden');
+    finalizeRunScore();
     if (state.els.completeTitle) state.els.completeTitle.textContent = victory ? 'RUN COMPLETE' : 'RUN FAILED';
+    renderCompleteScore();
     if (state.els.completeText) {
         state.els.completeText.textContent = victory
             ? '雪原路线完成，芙提雅安全返回信标点。'
@@ -1538,6 +1652,7 @@ async function useExecuteSkill(enemy) {
     }
     state.executeUses -= 1;
     enemy.hp = 0;
+    awardScoreForDeadEnemy(enemy);
     floatAtEnemy(enemy.id, '-99999999', 'execute');
     shakeEnemy(enemy.id);
     spawnHitParticlesAtEnemy(enemy.id, 'execute');
@@ -1559,6 +1674,7 @@ function renderCombat() {
     state.root.classList.toggle('is-started', combatStarted);
     state.root.classList.toggle('is-info-collapsed', !state.infoExpanded);
     state.root.classList.toggle('has-visible-hand', hasVisibleHand);
+    if (combatStarted && state.scoreboardOpen) closeScoreboardPanel();
     state.panel?.classList.toggle('is-side-combat-started', combatStarted);
     state.panel?.classList.toggle('is-side-combat-hint-visible', hintVisible);
     state.els.stylePanel?.classList.toggle('hidden', !stylePanelVisible);
@@ -1575,6 +1691,7 @@ function renderCombat() {
     renderHand();
     renderDeckControls();
     renderRuleDocControls();
+    renderScoreboardPanel();
     renderArchiveControls();
     renderLog();
 }
@@ -1582,8 +1699,25 @@ function renderCombat() {
 function renderProgressOnly() {
     const eventCount = currentEventCount();
     if (state.els.progress) state.els.progress.textContent = `事件 ${Math.min(state.eventIndex, eventCount)}/${eventCount}`;
+    if (state.els.scoreLive) state.els.scoreLive.textContent = `实时积分 ${state.score}`;
     renderRouteMap();
     if (state.els.refreshCount) state.els.refreshCount.textContent = String(state.refreshCount);
+}
+
+function renderCompleteScore() {
+    const target = state.els.completeScore;
+    if (!target) return;
+    target.textContent = '';
+    const label = document.createElement('span');
+    label.textContent = '最终积分';
+    const value = document.createElement('strong');
+    value.textContent = String(state.score);
+    target.append(label, value);
+    if (state.isNewScoreRecord) {
+        const badge = document.createElement('em');
+        badge.textContent = '新纪录';
+        target.appendChild(badge);
+    }
 }
 
 function renderRouteMap() {
@@ -2172,6 +2306,7 @@ function openArchivePanel() {
     state.archive = loadSideScrollerArchive();
     state.archiveOpen = true;
     closeRuleDocPanel();
+    closeScoreboardPanel();
     closeDeckPopover();
     closeStatusPopover();
     renderArchivePanel();
@@ -2195,6 +2330,7 @@ async function toggleRuleDocPanel() {
 async function openRuleDocPanel() {
     state.ruleDocOpen = true;
     closeArchivePanel();
+    closeScoreboardPanel();
     closeDeckPopover();
     closeStatusPopover();
     renderRuleDocControls();
@@ -2221,6 +2357,59 @@ function closeRuleDocPanel() {
     state.ruleDocOpen = false;
     state.els.rulePanel?.classList.add('hidden');
     state.els.ruleToggle?.classList.remove('is-open');
+}
+
+function toggleScoreboardPanel() {
+    if (state.scoreboardOpen) closeScoreboardPanel();
+    else openScoreboardPanel();
+}
+
+function openScoreboardPanel() {
+    state.scoreRecords = loadSideScrollerScores();
+    state.scoreboardOpen = true;
+    closeArchivePanel();
+    closeRuleDocPanel();
+    closeDeckPopover();
+    closeStatusPopover();
+    renderScoreboardPanel();
+}
+
+function closeScoreboardPanel() {
+    if (!state.scoreboardOpen) return;
+    state.scoreboardOpen = false;
+    state.els.scoreboardPanel?.classList.add('hidden');
+    state.els.scoreboardToggle?.classList.remove('is-open');
+}
+
+function renderScoreboardPanel() {
+    const panel = state.els.scoreboardPanel;
+    if (!panel) return;
+    panel.classList.toggle('hidden', !state.scoreboardOpen);
+    state.els.scoreboardToggle?.classList.toggle('is-open', state.scoreboardOpen);
+    if (!state.scoreboardOpen) return;
+    const list = state.els.scoreboardList;
+    if (!list) return;
+    list.textContent = '';
+    const records = state.scoreRecords.records || [];
+    if (!records.length) {
+        const empty = document.createElement('p');
+        empty.className = 'side-combat-scoreboard-empty';
+        empty.textContent = '还没有分数记录。';
+        list.appendChild(empty);
+        return;
+    }
+    records.slice(0, 10).forEach((record, index) => {
+        const row = document.createElement('div');
+        row.className = 'side-combat-scoreboard-row';
+        const rank = document.createElement('span');
+        rank.textContent = `#${index + 1}`;
+        const score = document.createElement('strong');
+        score.textContent = String(record.score);
+        const meta = document.createElement('small');
+        meta.textContent = `${record.difficultyLabel || record.difficulty} · 击杀 ${record.kills || 0} · ${formatScoreDate(record.completedAt)}`;
+        row.append(rank, score, meta);
+        list.appendChild(row);
+    });
 }
 
 function renderRuleDocControls() {
@@ -2308,6 +2497,15 @@ function escapeHtml(text) {
         '"': '&quot;',
         "'": '&#39;'
     }[char]));
+}
+
+function formatScoreDate(timestamp) {
+    const date = new Date(Number(timestamp) || Date.now());
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    return `${month}-${day} ${hour}:${minute}`;
 }
 
 function changeArchivePage(direction) {

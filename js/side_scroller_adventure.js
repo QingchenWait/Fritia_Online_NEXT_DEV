@@ -5,7 +5,7 @@ import {
     isSideScrollerCombatMovementBlocked,
     openSideScrollerCombat,
     updateSideScrollerCombat
-} from './side_scroller_combat.js?v=20260624-sprite-enemy';
+} from './side_scroller_combat.js?v=20260624-combat-score';
 
 const PANEL_ID = 'side-scroller-adventure';
 const CANVAS_ID = 'side-scroller-canvas';
@@ -80,6 +80,7 @@ const state = {
     lastFritiaHitbox: { left: 0, top: 0, right: 0, bottom: 0 },
     lastAdjutantHitbox: { left: 0, top: 0, right: 0, bottom: 0 },
     bgm: null,
+    requestClose: null,
     dpr: 1,
     width: 1,
     height: 1
@@ -126,8 +127,9 @@ const SNOW_PARTICLES = Array.from({ length: 70 }, (_, i) => ({
     drift: -0.18 + fract(Math.sin(i * 24.9) * 733) * 0.36
 }));
 
-export function initSideScrollerAdventure({ controlsModule } = {}) {
+export function initSideScrollerAdventure({ controlsModule, requestClose } = {}) {
     state.controlsModule = controlsModule || null;
+    state.requestClose = typeof requestClose === 'function' ? requestClose : null;
     state.panel = document.getElementById(PANEL_ID);
     state.canvas = document.getElementById(CANVAS_ID);
     state.ctx = state.canvas?.getContext('2d') || null;
@@ -272,7 +274,7 @@ function triggerFireAttack() {
 }
 
 function bindEvents() {
-    document.getElementById('side-scroller-close')?.addEventListener('click', closeSideScrollerAdventure);
+    document.getElementById('side-scroller-close')?.addEventListener('click', requestCloseAdventure);
     bindHoldButton('side-scroller-left', 'left');
     bindHoldButton('side-scroller-right', 'right');
 
@@ -282,7 +284,7 @@ function bindEvents() {
             if (event.code === 'Escape') {
                 event.preventDefault();
                 event.stopImmediatePropagation();
-                closeSideScrollerAdventure();
+                requestCloseAdventure();
             }
             return;
         }
@@ -290,7 +292,7 @@ function bindEvents() {
         event.stopImmediatePropagation();
         if (event.code === 'Escape') {
             event.preventDefault();
-            closeSideScrollerAdventure();
+            requestCloseAdventure();
             return;
         }
         if (event.code === 'KeyA' || event.code === 'ArrowLeft') {
@@ -319,6 +321,11 @@ function bindEvents() {
         state.inputLeft = false;
         state.inputRight = false;
     });
+}
+
+function requestCloseAdventure() {
+    if (state.requestClose) state.requestClose();
+    else closeSideScrollerAdventure();
 }
 
 function isEditableEventTarget(target) {

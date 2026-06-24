@@ -55,6 +55,7 @@ fritia_online_v3/
 │   ├── bartending_challenge.js
 │   ├── side_scroller_adventure.js
 │   ├── side_scroller_archive.js
+│   ├── side_scroller_scores.js
 │   ├── roundtable_whispers.js
 │   ├── deepseek_intimate_mode.js
 │   ├── knowledge_base.js
@@ -298,18 +299,18 @@ npm run dev
 
 入口与 DOM：
 
-- 初始房间看向南侧门时，`E` 仍进入暖调闲聚/显示入场券任务；`1` 打开战术考核场景。
+- 初始房间看向南侧门时，`E` 仍进入暖调闲聚/显示入场券任务；`1` 打开战术考核场景。暖调闲聚中看向返回宿舍出口时，`E` 返回宿舍，`1` 也可打开战术考核场景。
 - `#side-scroller-adventure`：全屏小游戏容器，已加入 `controls.js` overlay 管理列表。
 - `#side-scroller-canvas`：2D 渲染画布。
 - `#side-scroller-close`：返回房间按钮。
 - `#side-scroller-left` / `#side-scroller-right`：移动端独立左右移动按钮。
-- 进入战术考核横板后循环播放 `src/_voices/Soundtrack_Unpredictable_Cards.mp3`，关闭横板时停止并回到开头。
+- 进入战术考核横板后循环播放 `src/_voices/Soundtrack_Unpredictable_Cards.mp3`，关闭横板时停止并回到开头；若从暖调闲聚出口进入，进入时暂停酒吧 BGM，关闭战术考核并回到暖调闲聚后恢复酒吧 BGM。
 - `#side-scroller-combat`：横板战斗 HUD 根节点，由 `js/side_scroller_combat.js` 动态挂载到 `#side-scroller-adventure` 内。
 - `#side-combat-style-panel` / `#side-combat-style-input` / `#side-combat-start`：战术考核设定、战斗风格输入与提交战备申请按钮。
 - `#side-combat-difficulty-prev` / `#side-combat-difficulty-label` / `#side-combat-difficulty-detail` / `#side-combat-difficulty-next`：战术考核难度切换控件与关卡详情。
 - `#side-combat-approval`：LLM 初始卡池生成期间的“陶董正在审阅中 ... / 陶董已批准”审批状态；审批中隐藏 `#side-combat-start` 提交按钮，难度切换按钮保留但禁用。
 - `#side-combat-enemy-layer`：敌人目标层。
-- `#side-combat-route-map` / `#side-combat-progress`：顶部居中路线图和大号事件进度；路线图用 `⚔️/💜/👑` 表示战斗、补给/稀有、Boss，并用移动的 `🔻` 表示距下个事件的进度。
+- `#side-combat-route-map` / `#side-combat-progress` / `#side-combat-score-live`：顶部居中路线图、大号事件进度和实时积分；路线图用 `⚔️/💜/👑` 表示战斗、补给/稀有、Boss，并用移动的 `🔻` 表示距下个事件的进度。
 - `#side-combat-target-layer`：拖拽卡牌时显示合法作用对象光环与 `src/_2d_adventure/2d_fritia/target.png` 准星提示的目标层；该层高于敌方贴图、低于手牌/按钮等玩家 UI。
 - `#side-combat-hand`：前台四张手牌区域，支持点击选择和拖放到目标。
 - `#side-combat-deck-toggle` / `#side-combat-deck-count`：手牌左侧圆形卡池列表按钮和剩余数量角标。
@@ -317,6 +318,7 @@ npm run dev
 - `#side-combat-discard` / `#side-combat-play-count`：红色圆形垃圾桶弃牌区和本回合剩余出牌次数胶囊，手牌拖入后弃牌。
 - `#side-combat-info-toggle`：信息圆形按钮，点击展开或收起左下角 `#side-combat-log` 战斗信息卡片。
 - `#side-combat-rule-toggle` / `#side-combat-rule-panel` / `#side-combat-rule-content`：战术文档圆形按钮和规则简介浮窗，读取 `src/_2d_adventure/card_rule.md` 并用本地轻量 Markdown 渲染为只读说明；未开始时按钮在右侧与典藏牌库同 Y 轴并显示“战术文档”tag，开始后移动到左侧典藏牌库上方且不显示 tag。
+- `#side-combat-scoreboard-toggle` / `#side-combat-scoreboard-panel` / `#side-combat-scoreboard-list`：未开始界面右侧分数看板圆形按钮与 Top 10 分数记录浮窗，按钮使用 `src/_logos/icon_scoreboard_trophy.svg`；开始正式战斗后按钮隐藏。
 - `#side-combat-archive` / `#side-combat-archive-toggle` / `#side-combat-archive-count`：典藏牌库入口，左侧居中数据库圆形按钮，角标显示永久典藏卡牌数量。
 - `#side-combat-carry-slots`：典藏牌库下方 4 个纵向携带槽；开局前显示当前选择带入对局的牌型图标，战斗中点击可召唤对应典藏卡牌，已使用的槽位本局置灰。
 - `#side-combat-archive-panel` / `#side-combat-archive-grid` / `#side-combat-archive-prev` / `#side-combat-archive-next`：典藏牌库浮窗，按 3x2 展示固定高度永久收藏卡牌，超出 6 张后翻页；点击牌面选择或取消带入对局，最多 4 张；底部默认说明为“永久收藏 LLM 生成的任意卡牌。收藏以后，未来对局开始前可选择 4 张带入。”
@@ -324,8 +326,8 @@ npm run dev
 - `#side-combat-archive-cast-layer`：战斗中从携带槽召唤临时卡牌的浮层；临时卡可拖拽到敌人或芙提雅目标上使用。
 - `#side-combat-player-panel`：右上角芙提雅紧凑生命 HUD，使用 `src/_logos/Profile_Fritia.png` 作为带白色光环的小头像，生命文字和血条靠头像左侧右对齐。
 - `#side-combat-skill-guard` / `#side-combat-skill-execute`：分析员技能图标按钮，使用 `src/_2d_adventure/2d_fritia/Adjutant_Skill_0.png` 和 `Adjutant_Skill_1.png`，由 `side_scroller_adventure.js#getAdjutantHitbox` 锚定到分析员贴图身后并带金色闪电光环。
-- `#side-combat-reward-panel` / `#side-combat-complete-panel`：事件奖励与路线结算面板。
-- `#dream-painting-prompt` 在看向南侧门时复用为 `按 1 进入战术考核`。
+- `#side-combat-reward-panel` / `#side-combat-complete-panel` / `#side-combat-complete-score`：事件奖励与路线结算面板；路线结算时居中显示最终积分，新纪录会显示黄色“新纪录”角标。
+- `#dream-painting-prompt` 在看向南侧门或暖调闲聚返回宿舍出口时复用为 `按 1 进入战术考核`。
 
 运行约定：
 
@@ -356,6 +358,7 @@ npm run dev
 - 怪物卡片 UI 左上角使用统一浮字队列：普通伤害、召唤/火焰伤害、流血伤害使用大号高层级数字，状态变化（如 `🩸+X`、裂解、削弱、易伤）使用稍小字号并错位显示，伤害浮字始终压在状态浮字上层；芙提雅自身回血、护甲、专注等效果会在芙提雅 2D 贴图顶端正上方浮现。
 - 敌方单位均使用实验性贴图怪物表现：`甲型异化人` 为 `Moster_0.png` 高度 1.08，`武装会员` 为 `Moster_1.png` 高度 1.0，`连弩会员` 为 `Moster_2.png` 高度 0.85，`赐福者` 为 `Moster_3.png` 高度 1.15，`短刀会员` 为 `Moster_4.png` 高度 1.0，`丁型异化人` 为小 Boss `Moster_5.png` 高度 1.3，`食夜影兽` 为大 Boss `Moster_6.png` 高度 1.7。每种贴图怪物在 `SPRITE_ENEMY_CONFIG.variants` 中拥有独立的 `imageRatio`、`heightToAdjutant` 和横向间距权重。怪物脚底线段必须落在 `SPRITE_ENEMY_CONFIG.standingArea` 限定的 X/Y 站立区内；多只怪物在站立区内按 X 轴均匀分布、Y 轴前后错位，Y 越靠下 z-index 越高，必要时允许互相重叠或缩小超宽贴图以保证不越界。若单局中存在多个敌方单位，死亡单位会立即从场景和可选目标中移除；单敌方单位仍保留到战斗结算。顶部透明 HUD 显示名字/HP/细血条；状态图标和 `⚔️ X` 仍位于名字与血条上方。卡牌拖拽、目标提示框、伤害浮字、粒子和受击颤抖均以贴图 hitbox 为准，贴图加载失败时回退为普通敌人卡片。
 - 战斗中点击 `刷新战术` 会使用预加载卡池；若刷新前当前卡池剩余总数（前台手牌 + 隐藏余牌）大于 4，按钮显示 `重新抽牌并结束回合` 且刷新后立即结束玩家回合；若剩余总数小于等于 4，按钮显示 `重新抽牌` 且刷新后不结束回合。
+- 积分系统：击杀敌方单位立即加分并刷新 `#side-combat-score-live`，基础分为普通怪物 120、小 Boss 420、大 Boss 760；每经过 1 个敌方回合扣 22 分，但最低保留基础分 35%。补给和稀有信标不加分。路线胜利或中断结算时会把本局正分写入 `fritia_side_scroller_scores`，只保留历史最高 10 条，不区分难度榜。
 - 手牌支持拖动幽灵卡：拖到合法目标会飞向目标并施放，松开在无效目标上会快速回弹到原手牌位置；拖到 `#side-combat-discard` 会弃牌且不消耗出牌次数。
 - 典藏牌库：战斗中把前台手牌拖到 `#side-combat-archive-toggle` 数据库按钮范围内，会把该牌永久保存到 `fritia_side_scroller_card_archive`，同时从当前手牌移除并从本轮卡池补牌；新收藏的卡牌置顶，重复收藏同签名卡牌会以最新收藏记录置顶。牌库内每张卡右上角有红色垃圾桶，需二次确认才会从永久典藏中删除。
 - 战术文档浮窗与典藏牌库互斥：打开 `#side-combat-rule-panel` 时会关闭典藏牌库，打开典藏牌库时会关闭战术文档；该浮窗只读取静态 Markdown 文档，规则内容和本轮卡池列表都使用自绘滚动条，不新增 `localStorage` key，不进入导入导出。
@@ -372,6 +375,7 @@ npm run dev
 - LLM 目标输出为 `{ cards: [{ slotId, category, name, description }] }`；解析器兼容模型误返回的直接数组，但 prompt 仍要求完整 object。locked 槽位不能改类别，flex 槽位类别优先由玩家自由战斗风格引导，文案需按 rarity 区分强度：蓝色正常、紫色更强、金色无与伦比地强，同时继续参考芙提雅知识库经历，并遵守 `effectScope` 的单体/群体描述；召唤牌隐藏流血不写进描述；非法 JSON、非法类别、过长文本或无 API 配置都会回退到本地卡牌文本。
 - 分析员技能：`神之守护` 每局 3 次，芙提雅回满血、获得 3 个玩家回合减伤、敌方下回合沉默；守护代价为芙提雅 2 回合内攻击牌伤害降低 20%，会直接反映在攻击类卡牌数值和结算中。`御驾亲征` 每局 3 次，非 Boss 直接击杀，Boss 生命高于 50% 时不可用。
 - `js/side_scroller_archive.js` 负责典藏牌库存储、导出、导入和卡牌规范化；不会调用 LLM，不新增后端，不执行代码字符串。
+- `js/side_scroller_scores.js` 负责战术考核分数 Top 10 存储、导出和导入；不会调用 LLM，不新增后端。
 - 战斗 UI 只存在于横板 overlay 内，关闭横板后除典藏牌库外的全部运行态丢弃，不影响日常对话、约会、造梦、调酒、圆桌密语和其他存档字段。
 
 ## 舞蹈系统：`js/dance_system.js`
@@ -1433,13 +1437,14 @@ DOM ID：
 - `fritia_bar_guest_builtin_state`：暖调闲聚内置访客保留状态；当前用于记录芬妮是否应随酒吧场景自动加载。
 - `fritia_roundtable_whispers`：圆桌密语完整消息历史 `fullMessages/messages`、`fullTopicSummary/topicSummary`、参与者选择、自动接话/idle 设置和 `botChainLimit`；消息仅保留最近 5 天内最多 240 条，旧存档的 `messages/topicSummary` 会自动迁移；亲密模式有效时生成的 bot 回复可带 `deepseekIntimateMode: true`。
 - `fritia_side_scroller_card_archive`：战术考核典藏牌库，包含永久收藏卡牌 `cards` 与当前选择带入对局的 `equippedIds`；只保存经过本地规范化的卡牌 JSON，不保存战斗运行态。
+- `fritia_side_scroller_scores`：战术考核分数记录，保存最高 10 次路线结算的 `score/difficulty/difficultyLabel/eventsCleared/kills/turns/completedAt`，不同难度合并排序；不保存战斗运行态。
 - `fritia_achievements`：成就解锁与通知状态。
 - `fritia_painting`：挂画图片 data URL。
 - `fritia_dream_furniture`：造梦家具记录数组。
 
 调酒挑战不新增 `localStorage` key；每局状态只存在于 `js/bartending_challenge.js` 内存中，关闭浮层后丢弃。
 
-2D 横板冰雪小游戏的路线、手牌、生命值等运行状态不写入 `localStorage`；典藏牌库使用 `fritia_side_scroller_card_archive` 单独保存。
+2D 横板冰雪小游戏的路线、手牌、生命值等运行状态不写入 `localStorage`；典藏牌库使用 `fritia_side_scroller_card_archive` 单独保存，分数 Top 10 使用 `fritia_side_scroller_scores` 单独保存。
 
 造梦家具记录：
 
@@ -1516,13 +1521,14 @@ DOM ID：
 - `barGuestBuiltinState`
 - `barGuestCards`
 - `sideScrollerCardArchive`
+- `sideScrollerScores`
 - `painting`
 
 导入策略：
 
 - `gameState` 使用 `importGameState()` 规范化。
 - `conversationHistory`、`dateConversationHistory` 覆盖式导入。
-- `barConversations` 覆盖式导入；`roundtableWhispers` 按消息 id 去重合并；`sideScrollerCardArchive` 按典藏卡牌 id 合并并保留最多 4 张携带选择；`knowledgeBase` 按知识库/文件/分块 id 去重合并并重建 BM25 索引；`barGuestBuiltinState` 覆盖式恢复内置访客保留状态；`barGuestCards` 按 id 合并并恢复 IndexedDB 资源。
+- `barConversations` 覆盖式导入；`roundtableWhispers` 按消息 id 去重合并；`sideScrollerCardArchive` 按典藏卡牌 id 合并并保留最多 4 张携带选择；`sideScrollerScores` 按记录 id 合并并保留最高 10 条；`knowledgeBase` 按知识库/文件/分块 id 去重合并并重建 BM25 索引；`barGuestBuiltinState` 覆盖式恢复内置访客保留状态；`barGuestCards` 按 id 合并并恢复 IndexedDB 资源。
 - `dreamFurniture` 按 `id` 去重合并，坏 spec 或不安全摆放会跳过，不中断整体导入。
 - `achievements` 合并 timestamp。
 - `settings` 和 `painting` 若存在则导入。
@@ -1631,12 +1637,13 @@ Escape：
 6. 只向右移动累计前进距离；触发战斗、补给、稀有信标或 Boss 时横板移动暂停。
 7. 战斗中点击或拖放卡牌到敌人/芙提雅可结算，攻击、治疗、控制、召唤、强化牌都有可见反馈；召唤牌会消耗每回合 3 次出牌次数，并能挂流血。
 8. `神之守护` 和 `御驾亲征` 各 3 次；`神之守护` 后攻击类卡牌数值在 2 回合内降低 20%，敌方伤害意图不因守护代价提高；Boss 生命高于 50% 时 `御驾亲征` 不应生效。
-9. 未开始界面右侧的“战术文档”按钮可打开规则简介；开始战斗后该按钮移动到左侧典藏牌库上方，且规则简介与典藏牌库弹窗互斥。
+9. 未开始界面右侧的“战术文档”按钮可打开规则简介，下面的分数看板按钮可查看历史最高 10 次得分；开始战斗后战术文档按钮移动到左侧典藏牌库上方，分数看板按钮隐藏；结算后点击重新开始回到“战术考核设定”时，战术文档按钮回到右侧初始位置；规则简介与典藏牌库弹窗互斥。
 10. 全局刷新次数初始为敌人事件数 + 2，点击刷新会使用预加载的 15 张卡池并消耗次数；本轮卡池总剩余数（前台手牌 + 隐藏余牌）降为 0 且仍有全局刷新次数时，才会自动消耗 1 次刷新并补满新卡池。
-11. 当前难度路线事件结束后显示路线完成；芙提雅 HP 归零，或全局刷新次数为 0 且没有攻击/召唤牌、敌方流血、可用 `御驾亲征` 等伤害手段时，显示路线中断。
-12. 点击 `#side-scroller-close` 或按 `Escape` 返回房间，并派发 `fritia-overlay-closed` 恢复控制模式。
-12. 移动端显示 `#side-scroller-left` / `#side-scroller-right`，长按移动、松开停止；战斗 HUD 在小屏不遮挡开始/返回按钮。
-13. 退出小游戏后，旧房间南侧门按 `E` 进入暖调闲聚/显示入场券任务的原逻辑保持不变。
+11. 击杀敌方单位会立刻更新实时积分，补给不加分；路线结算页显示最终积分，新纪录显示黄色角标，并写入分数 Top 10。
+12. 当前难度路线事件结束后显示路线完成；芙提雅 HP 归零，或全局刷新次数为 0 且没有攻击/召唤牌、敌方流血、可用 `御驾亲征` 等伤害手段时，显示路线中断。
+13. 点击 `#side-scroller-close` 或按 `Escape` 返回房间，并派发 `fritia-overlay-closed` 恢复控制模式。
+14. 移动端显示 `#side-scroller-left` / `#side-scroller-right`，长按移动、松开停止；战斗 HUD 在小屏不遮挡开始/返回按钮。
+15. 退出小游戏后，旧房间南侧门按 `E` 进入暖调闲聚/显示入场券任务的原逻辑保持不变；暖调闲聚出口区域按 `E` 返回宿舍的原逻辑保持不变。
 
 暖调闲聚：
 
@@ -1645,7 +1652,7 @@ Escape：
 3. 完成全部入场券任务后按 E 黑屏转场进入暖调闲聚，旧卧室/造梦空间组隐藏，玩家和芙提雅都出现在酒吧地图内。
 4. 酒吧内 WASD 可移动，高物体阻挡；低台阶、低平台和出口楼梯不会把玩家或芙提雅卡住。
 5. 酒吧内接近芙提雅仍可按 F 对话。
-6. 酒吧内看向出口区域提示 `按 E 返回卧室`，按 E 黑屏回到旧房间南侧门附近。
+6. 酒吧内看向出口区域提示 `按 E 返回卧室` 和 `按 1 进入战术考核`，按 E 黑屏回到旧房间南侧门附近，按 1 打开战术考核。
 7. 返回卧室后，购物终端、礼物收藏柜、造梦门、书桌约会、睡觉、换装、挂画仍可正常触发。
 8. 酒吧内看向 `X=-4.0~4.0, Y=0.0~4.5, Z=32.5` 舞台平面，提示 `按 E 观看跳舞`，按 E 打开 `#dance-panel`。
 9. 在舞曲选择中导入本地 `.vmd`，可选导入音频并选择芙提雅模型；点击开始后浮层关闭，玩家仍可 WASD 移动和转动视角，芙提雅从 `X=0, Z=35.6` 且脚底目标 Y 为 `DANCE_STAGE_Y_OFFSET` 的位置开始播放 VMD。
