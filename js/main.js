@@ -48,7 +48,11 @@ import {
     isSideScrollerAdventureVisible,
     openSideScrollerAdventure,
     updateSideScrollerAdventure
-} from './side_scroller_adventure.js?v=20260623-side-combat';
+} from './side_scroller_adventure.js?v=20260624-sprite-enemy';
+import {
+    exportSideScrollerArchive,
+    importSideScrollerArchive
+} from './side_scroller_archive.js?v=20260624-combat-ui';
 import {
     BAR_ROOM_ID,
     ensureBarScene,
@@ -3228,7 +3232,8 @@ async function buildExportPayloadV3(options = {}) {
         roundtableWhispers: exportRoundtableWhispers(),
         knowledgeBase: await exportKnowledgeBaseArchive(),
         barGuestBuiltinState: exportBarGuestBuiltinState(),
-        barGuestCards: options.barGuestCards || exportBarGuestCards()
+        barGuestCards: options.barGuestCards || exportBarGuestCards(),
+        sideScrollerCardArchive: exportSideScrollerArchive()
     };
 }
 
@@ -3287,6 +3292,7 @@ async function applyImportedDataV3(data, assetFiles = new Map()) {
         importBarConversationHistory(data.barConversations);
     }
     const roundtableImport = importRoundtableWhispers(data.roundtableWhispers || data.barRoundtableWhispers || {});
+    const sideScrollerArchiveImport = importSideScrollerArchive(data.sideScrollerCardArchive || data.sideScrollerArchive || {});
     const knowledgeImport = await importKnowledgeBaseArchive(data.knowledgeBase || data.knowledgeBasesArchive || {}, { replacePreloaded: true });
 
     const guestAssets = [];
@@ -3309,7 +3315,7 @@ async function applyImportedDataV3(data, assetFiles = new Map()) {
     refreshDreamFurnitureAfterImport();
     updateGameHud(true);
     renderGiftCollection();
-    return { importResult, dreamImport, guestImport, roundtableImport, knowledgeImport };
+    return { importResult, dreamImport, guestImport, roundtableImport, knowledgeImport, sideScrollerArchiveImport };
 }
 
 async function handleImportFileV2(e) {
@@ -3325,8 +3331,8 @@ async function handleImportFileV2(e) {
         } else {
             data = JSON.parse(await file.text());
         }
-        const { importResult, dreamImport, guestImport, roundtableImport, knowledgeImport } = await applyImportedDataV3(data, assetFiles);
-        alert(`导入成功！礼物新增 ${importResult.giftsAdded || 0} 条，造梦家具新增 ${dreamImport.added || 0} 件，访客角色导入 ${guestImport.imported || 0} 个，圆桌消息新增 ${roundtableImport.imported || 0} 条，知识库新增 ${knowledgeImport.knowledgeBases || 0} 个 / ${knowledgeImport.files || 0} 个文件。刷新页面以应用设置。`);
+        const { importResult, dreamImport, guestImport, roundtableImport, knowledgeImport, sideScrollerArchiveImport } = await applyImportedDataV3(data, assetFiles);
+        alert(`导入成功！礼物新增 ${importResult.giftsAdded || 0} 条，造梦家具新增 ${dreamImport.added || 0} 件，访客角色导入 ${guestImport.imported || 0} 个，圆桌消息新增 ${roundtableImport.imported || 0} 条，典藏卡牌新增 ${sideScrollerArchiveImport.imported || 0} 张，知识库新增 ${knowledgeImport.knowledgeBases || 0} 个 / ${knowledgeImport.files || 0} 个文件。刷新页面以应用设置。`);
     } catch (err) {
         alert('导入失败：文件格式不正确或资源缺失');
         console.error('Import error:', err);
@@ -3355,6 +3361,7 @@ function handleImportFile(e) {
                 importDateConversationHistory(data.dateConversations);
             }
             importRoundtableWhispers(data.roundtableWhispers || data.barRoundtableWhispers || {});
+            const sideScrollerArchiveImport = importSideScrollerArchive(data.sideScrollerCardArchive || data.sideScrollerArchive || {});
             const knowledgeImport = await importKnowledgeBaseArchive(data.knowledgeBase || data.knowledgeBasesArchive || {}, { replacePreloaded: true });
             const importResult = importGameState(data, { suppressEvent: true });
             const dreamImport = importDreamFurniture(data.dreamFurniture || data.gameState?.dreamFurniture || []);
@@ -3363,7 +3370,7 @@ function handleImportFile(e) {
             refreshDreamFurnitureAfterImport();
             updateGameHud(true);
             renderGiftCollection();
-            alert(`导入成功！礼物同步新增 ${importResult.giftsAdded || 0} 条，造梦家具新增 ${dreamImport.added || 0} 件，跳过 ${dreamImport.skipped || 0} 件，知识库新增 ${knowledgeImport.knowledgeBases || 0} 个 / ${knowledgeImport.files || 0} 个文件。刷新页面以应用设置。`);
+            alert(`导入成功！礼物同步新增 ${importResult.giftsAdded || 0} 条，造梦家具新增 ${dreamImport.added || 0} 件，跳过 ${dreamImport.skipped || 0} 件，典藏卡牌新增 ${sideScrollerArchiveImport.imported || 0} 张，知识库新增 ${knowledgeImport.knowledgeBases || 0} 个 / ${knowledgeImport.files || 0} 个文件。刷新页面以应用设置。`);
         } catch (err) {
             alert('导入失败：文件格式不正确');
             console.error('Import error:', err);

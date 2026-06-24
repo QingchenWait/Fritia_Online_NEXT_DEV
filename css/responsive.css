@@ -90,23 +90,64 @@
 
 @media (max-width: 600px) {
     .side-combat-statusbar {
-        top: 64px;
-        left: 12px;
-        right: 12px;
-        grid-template-columns: 1fr 1fr;
+        top: 112px;
+        left: 50%;
+        right: auto;
+        width: calc(100vw - 24px);
+        grid-template-columns: 1fr;
         gap: 8px;
+        transform: translateX(-50%);
     }
-    .side-combat-chip,
+    .side-combat-route {
+        top: 13px;
+        width: min(360px, calc(100vw - 208px));
+        min-width: 210px;
+        gap: 1px;
+    }
+    .side-combat-route > strong {
+        font-size: 0.94rem;
+    }
+    .side-combat-route__map {
+        min-height: 28px;
+        padding-top: 14px;
+    }
+    .side-combat-route__pointer {
+        top: -12px;
+        font-size: 1.18rem;
+    }
+    .side-combat-route__node {
+        min-width: 20px;
+        font-size: 0.98rem;
+    }
+    .side-combat-route__gap {
+        min-width: 12px;
+        font-size: 0.72rem;
+        letter-spacing: 0.1em;
+    }
     .side-combat-player {
-        min-height: 58px;
-        padding: 9px 10px;
+        top: 90px;
+        right: 10px;
+        width: min(232px, calc(74vw - 10px));
+        min-height: 54px;
+        grid-template-columns: minmax(112px, 1fr) 48px;
+        gap: 8px;
+        padding: 6px 7px 6px 12px;
     }
-    .side-combat-skills {
-        grid-column: 1 / -1;
+    .side-combat-player__avatar {
+        width: 44px;
+        height: 44px;
     }
-    .side-combat-skills button {
-        min-height: 42px;
-        font-size: 0.74rem;
+    .side-combat-player strong {
+        font-size: 0.88rem;
+    }
+    .side-combat-skill {
+        width: 48px;
+        height: 48px;
+        min-height: 48px;
+    }
+    .side-combat-skill img {
+        width: 40px;
+        height: 40px;
     }
     .side-combat-enemy-layer {
         top: 37%;
@@ -124,6 +165,13 @@
     .side-combat-enemy--boss {
         width: 158px;
         min-height: 118px;
+    }
+    .side-combat-sprite-enemy__hud {
+        width: min(138px, 88%);
+    }
+    .side-combat-sprite-enemy__row .side-combat-enemy__name,
+    .side-combat-sprite-enemy__row strong {
+        font-size: 0.68rem;
     }
     .side-combat-hand {
         bottom: 120px;
@@ -173,6 +221,103 @@
     }
     .side-combat-deck-toggle {
         left: calc(50% - 33vw - 46px);
+    }
+    .side-combat-refresh-round {
+        left: calc(50% - 33vw - 98px);
+    }
+    .side-combat-info-toggle {
+        left: 12px;
+        top: auto;
+        bottom: 118px;
+    }
+    .side-combat-rule-toggle {
+        left: auto;
+        right: 12px;
+        top: calc(50% - 112px);
+        bottom: auto;
+        width: 46px;
+        height: 46px;
+        font-size: 1.28rem;
+        transform: translateY(-50%);
+    }
+    .side-combat-rule-toggle:hover {
+        transform: translateY(calc(-50% - 2px));
+    }
+    .side-combat-rule-toggle::after {
+        min-width: 54px;
+        font-size: 0.58rem;
+    }
+    .side-combat.is-started .side-combat-rule-toggle {
+        left: 12px;
+        right: auto;
+        top: calc(50% - 166px);
+        bottom: auto;
+    }
+    .side-combat-discard {
+        left: auto;
+        right: 80px;
+    }
+    .side-combat-play-count {
+        left: auto;
+        right: 6px;
+        bottom: 118px;
+        min-width: 62px;
+        height: 46px;
+        padding: 0 10px;
+        font-size: 0.94rem;
+    }
+    .side-combat-archive {
+        left: 12px;
+        top: 50%;
+        gap: 26px;
+    }
+    .side-combat-archive-toggle {
+        width: 46px;
+        height: 46px;
+    }
+    .side-combat-archive-toggle::after {
+        width: 48px;
+        font-size: 0.58rem;
+    }
+    .side-combat-archive-db {
+        width: 21px;
+        height: 25px;
+    }
+    .side-combat-carry-slots {
+        gap: 6px;
+        padding: 8px 6px;
+    }
+    .side-combat-carry-slot {
+        width: 36px;
+        height: 36px;
+        font-size: 0.9rem;
+    }
+    .side-combat-archive-panel {
+        left: 66px;
+        width: calc(100vw - 78px);
+        max-height: calc(100vh - 122px);
+        overflow: auto;
+    }
+    .side-combat-rule-panel {
+        right: 66px;
+        width: calc(100vw - 78px);
+        max-height: calc(100vh - 122px);
+    }
+    .side-combat.is-started .side-combat-rule-panel {
+        left: 66px;
+        right: auto;
+    }
+    .side-combat-archive-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-auto-rows: 132px;
+        min-height: 0;
+    }
+    .side-combat-archive-card {
+        height: 132px;
+    }
+    .side-combat-card--archive-cast {
+        width: 120px;
+        height: 158px;
     }
     .side-combat-actions button {
         min-height: 42px;

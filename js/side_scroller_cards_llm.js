@@ -2,8 +2,8 @@ import { getSettings } from './settings.js';
 import { buildRagReferenceMessage, ensurePreloadedKnowledgeBases } from './knowledge_base.js';
 
 const SYSTEM_PROMPT_URL = 'src/_queries/system_prompt.txt';
-const CARD_COUNT = 14;
-const LOCKED_CATEGORIES = ['attack', 'attack', 'attack', 'heal', 'heal', 'heal'];
+const CARD_COUNT = 15;
+const LOCKED_CATEGORIES = ['attack', 'attack', 'attack', 'attack', 'heal', 'heal', 'heal'];
 const FLEX_CATEGORIES = ['attack', 'heal', 'control', 'summon', 'buff'];
 
 export const SIDE_CARD_CATEGORY_LABELS = {
@@ -31,7 +31,7 @@ const EFFECTS = {
     heal: ['heal', 'armor'],
     control: ['freeze', 'silence', 'vulnerable'],
     summon: ['fire_summon'],
-    buff: ['shield', 'focus', 'weaken', 'weaken', 'vulnerable']
+    buff: ['shield', 'focus', 'weaken', 'weaken', 'vulnerable', 'bleed_growth', 'rupture_stack', 'focus_chain']
 };
 
 const FALLBACK_NAMES = {
@@ -72,7 +72,7 @@ export async function buildSideScrollerCardBatch({ styleText = '', reason = 'sta
     );
 
     return {
-        cards: slots.map((slot, index) => materializeCard(slot, suggestionBySlot.get(slot.slotId), index)),
+        cards: shuffleCards(slots.map((slot, index) => materializeCard(slot, suggestionBySlot.get(slot.slotId), index))),
         source,
         message,
         diagnostics
@@ -126,9 +126,9 @@ function materializeCard(slot, suggestion, index) {
 
 function createMechanics(category, rarity, effectKind, effectScope = 'single') {
     const strength = {
-        blue: { attack: [18, 30], heal: [14, 26], summon: [22, 34], shield: 0.18, focus: 0.14, buffTurns: 2, control: [1, 1], vulnerable: 0.24, vulnerableTurns: 2 },
-        purple: { attack: [36, 62], heal: [32, 52], summon: [42, 70], shield: 0.28, focus: 0.24, buffTurns: 2, control: [1, 2], vulnerable: 0.38, vulnerableTurns: 2 },
-        gold: { attack: [96, 190], heal: [82, 150], summon: [120, 260], shield: 0.42, focus: 0.42, buffTurns: 3, control: [2, 3], vulnerable: 0.72, vulnerableTurns: 3 }
+        blue: { attack: [18, 30], heal: [14, 26], summon: [22, 34], shield: 0.18, focus: 0.14, focusChain: 0.1, rupture: 0.12, buffTurns: 2, control: [1, 1], vulnerable: 0.24, vulnerableTurns: 2 },
+        purple: { attack: [36, 62], heal: [32, 52], summon: [42, 70], shield: 0.28, focus: 0.24, focusChain: 0.1, rupture: 0.12, buffTurns: 2, control: [1, 2], vulnerable: 0.38, vulnerableTurns: 2 },
+        gold: { attack: [96, 190], heal: [82, 150], summon: [120, 260], shield: 0.42, focus: 0.42, focusChain: 0.1, rupture: 0.12, buffTurns: 3, control: [2, 3], vulnerable: 0.72, vulnerableTurns: 3 }
     }[rarity] || {};
 
     if (category === 'heal') {
@@ -157,6 +157,15 @@ function createMechanics(category, rarity, effectKind, effectScope = 'single') {
         if (effectKind === 'vulnerable') {
             return { targetMode: 'enemy', value: strength.vulnerable, duration: strength.vulnerableTurns, tags: ['debuff'] };
         }
+        if (effectKind === 'bleed_growth') {
+            return { targetMode: 'enemy', value: 1, duration: 0, tags: ['debuff', 'stacking', 'bleed-growth'] };
+        }
+        if (effectKind === 'rupture_stack') {
+            return { targetMode: 'enemy', value: strength.rupture, duration: 0, tags: ['debuff', 'stacking', 'rupture'] };
+        }
+        if (effectKind === 'focus_chain') {
+            return { targetMode: 'self', value: strength.focusChain, duration: 0, tags: ['damage-up', 'stacking', 'battle-persistent'] };
+        }
         return { targetMode: 'self', value: strength.shield, duration: strength.buffTurns, tags: ['defense'] };
     }
     const area = effectScope === 'area';
@@ -179,6 +188,9 @@ function fallbackDescription(card) {
         if (card.effectKind === 'focus') return `伤害+${Math.round(card.value * 100)}%`;
         if (card.effectKind === 'weaken') return `敌伤-${Math.round(card.value * 100)}%`;
         if (card.effectKind === 'vulnerable') return `易伤${Math.round(card.value * 100)}%`;
+        if (card.effectKind === 'bleed_growth') return '血燃增幅';
+        if (card.effectKind === 'rupture_stack') return `裂解+${Math.round(card.value * 100)}%`;
+        if (card.effectKind === 'focus_chain') return `连击+${Math.round(card.value * 100)}%`;
         return `减伤${Math.round(card.value * 100)}%`;
     }
     return card.tags?.includes('area')
@@ -234,13 +246,15 @@ async function requestCardSuggestions({ slots, styleText, reason }) {
                     '你正在为一个纯静态网页 2D 横板战斗小游戏生成卡牌命名。',
                     '只能输出 JSON，禁止 Markdown，禁止代码，禁止外部 URL。',
                     '必须优先参考知识库中的芙提雅个人经历、火种、普罗米修斯神格、世界树、海姆达尔部队、缄默装甲、绝望的温度、研究员经历和她对技术代价的态度。',
-                    '卡牌 name 与 description 要体现这些经历或主题，不要写成和芙提雅无关的通用冰雪技能。',
+                    '卡牌 name 与 description 要体现这些经历或主题，不要写成和芙提雅无关的通用冰雪技能。description 中不要包含具体的数值或规则说明，要写成与芙提雅相关的战术描述。',
                     '玩家输入的战斗风格是自由文本，只用于引导 flex 槽位的类别倾向和命名气质，不要套用固定模板，也不要把玩家要求改写成规则数值。',
                     '必须先理解 battleStyle 对牌型类别的真实要求，再决定 flex 槽位 category；如果玩家明确要求某类牌更多或全给某类牌，flex 槽位要优先满足该类别。',
                     '不要只把玩家要求写进 name/description 里。例如玩家要求“都给我召唤牌”，flex 槽位应优先输出 summon，而不是输出 attack 但描述成召唤。',
                     'lockedCategory 不可改变；flex 槽位可在 attack/heal/control/summon/buff 中自由选择，类别选择权来自你对 battleStyle 的理解。',
                     '每个槽位会提供 rarity：blue 文案正常克制，purple 文案要显得更强大，gold 文案要显得无与伦比地强大；三种等级都必须继续参考芙提雅知识库经历，不要写成空泛强度形容。',
-                    '每个槽位会提供 effectScope：single 必须写成单体/单目标/精准打击语义；area 必须写成群体/范围/多目标语义。description 不得和 effectScope 矛盾。',
+                    '每个槽位会提供 effectScope：single 的语义描述必须写成与“单体/单目标/精准打击”效果相关；area 的语义描述必须写成与“群体/范围/多目标”效果相关。description 不得和 effectScope 矛盾。',
+                    '召唤牌存在本地隐藏流血机制，但 name/description 不要直接写“流血”“持续伤害”“出血”等说明；这部分只由本地数值 UI 表达。',
+                    '强化牌可能被本地实现为血燃、裂解、连锁专注等叠层策略；参考知识库中的芙提雅相关知识和主题，根据对应的策略进行命名。',
                     '必须输出完整 JSON object：{"cards":[...]}；不要直接输出数组，不要省略任何槽位。',
                     '不得输出数值、概率、规则覆盖或可执行脚本。'
                 ].join('\n')
@@ -259,10 +273,10 @@ async function requestCardSuggestions({ slots, styleText, reason }) {
                         heal: '恢复芙提雅生命或增加护甲的防护牌',
                         control: '冻结、沉默、易伤等控制牌',
                         summon: '召唤/火种协同/群体攻击牌',
-                        buff: '强化芙提雅或给敌方施加削弱/易伤的状态牌'
+                        buff: '强化芙提雅或给敌方施加削弱、易伤、血燃、裂解、连锁专注等状态牌'
                     },
                     categoryPolicy: [
-                        '前 6 个 lockedCategory 槽位必须保持：3 张 attack、3 张 heal。',
+                        '前 7 个 lockedCategory 槽位必须保持：4 张 attack、3 张 heal。',
                         '其余 lockedCategory 为 null 的 flex 槽位必须优先服从 battleStyle 的牌型意图。',
                         '如果 battleStyle 明确要求“全/都/只要/尽量/多给”某类牌，所有或绝大多数 flex 槽位都应选择该类 category。',
                         '先确定每个 flex 槽位的 category，再根据知识库为该 category 写芙提雅相关 name/description。'
@@ -335,6 +349,15 @@ async function requestCardSuggestions({ slots, styleText, reason }) {
     }
     if (!normalized.length) throw new Error('LLM 返回的卡牌建议全部未通过校验。');
     return normalized;
+}
+
+function shuffleCards(cards) {
+    const result = cards.slice();
+    for (let i = result.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
 }
 
 async function loadCardKnowledgeContext(styleText = '') {

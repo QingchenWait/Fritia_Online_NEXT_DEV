@@ -5,11 +5,12 @@ import {
     isSideScrollerCombatMovementBlocked,
     openSideScrollerCombat,
     updateSideScrollerCombat
-} from './side_scroller_combat.js?v=20260623-side-combat';
+} from './side_scroller_combat.js?v=20260624-sprite-enemy';
 
 const PANEL_ID = 'side-scroller-adventure';
 const CANVAS_ID = 'side-scroller-canvas';
 const ASSET_BASE = 'src/_2d_adventure/2d_fritia/';
+const BGM_SOURCE = './src/_voices/Soundtrack_Unpredictable_Cards.mp3';
 const PART_SOURCES = {
     body: 'Simple_Body.png',
     arm: 'Simple_Arm.png',
@@ -39,7 +40,7 @@ const ADJUTANT_COMPANION = {
     alpha: 0.96,
     rig: {
         body: { key: 'adjutantBody', x: 0, y: -415, pivotX: 0.5, pivotY: 0.7, alpha: 1, partScale: 1 },
-        arm: { key: 'adjutantArm', x: -13, y: -507, pivotX: 0.88, pivotY: 0.02, alpha: 1, partScale: 0.92, idleAngle: 2, swingAngle: 4 },
+        arm: { key: 'adjutantArm', x: -13, y: -507, pivotX: 0.88, pivotY: 0.15, alpha: 1, partScale: 0.92, idleAngle: 2, swingAngle: 4 },
         legBack: { key: 'adjutantLegBack', x: 22, y: -324, pivotX: 0.5, pivotY: 0.05, alpha: 0.72, partScale: 0.96 },
         legFront: { key: 'adjutantLegFront', x: -20, y: -326, pivotX: 0.5, pivotY: 0.05, alpha: 1, partScale: 0.96 }
     }
@@ -77,6 +78,8 @@ const state = {
     snowClock: 0,
     lastFireScreenPosition: { x: 0, y: 0 },
     lastFritiaHitbox: { left: 0, top: 0, right: 0, bottom: 0 },
+    lastAdjutantHitbox: { left: 0, top: 0, right: 0, bottom: 0 },
+    bgm: null,
     dpr: 1,
     width: 1,
     height: 1
@@ -139,6 +142,7 @@ export function initSideScrollerAdventure({ controlsModule } = {}) {
         getFacing: () => state.facing,
         getFireScreenPosition: () => ({ ...state.lastFireScreenPosition }),
         getFritiaHitbox: () => ({ ...state.lastFritiaHitbox }),
+        getAdjutantHitbox: () => ({ ...state.lastAdjutantHitbox }),
         triggerFireAttack: () => triggerFireAttack()
     });
     resizeCanvas();
@@ -163,10 +167,12 @@ export function openSideScrollerAdventure() {
     state.adjutantOffsetX = ADJUTANT_COMPANION.backOffsetX;
     state.snowClock = 0;
     state.lastFireScreenPosition = { x: 0, y: 0 };
+    state.lastAdjutantHitbox = { left: 0, top: 0, right: 0, bottom: 0 };
     resizeCanvas();
     state.panel.classList.remove('hidden');
     document.body.classList.add('side-scroller-active');
     state.controlsModule?.releaseControlMode?.({ resumeOnClose: true });
+    playTacticalExamBgm();
     openSideScrollerCombat();
     render();
 }
@@ -176,10 +182,32 @@ export function closeSideScrollerAdventure() {
     state.visible = false;
     state.inputLeft = false;
     state.inputRight = false;
+    stopTacticalExamBgm();
     closeSideScrollerCombat();
     state.panel.classList.add('hidden');
     document.body.classList.remove('side-scroller-active');
     document.dispatchEvent(new CustomEvent('fritia-overlay-closed', { detail: { id: PANEL_ID } }));
+}
+
+function playTacticalExamBgm() {
+    if (!state.bgm) {
+        state.bgm = new Audio(BGM_SOURCE);
+        state.bgm.loop = true;
+        state.bgm.volume = 0.46;
+    }
+    state.bgm.currentTime = 0;
+    const playPromise = state.bgm.play();
+    if (playPromise?.catch) {
+        playPromise.catch(err => {
+            console.warn('[SideScroller] Tactical exam BGM could not autoplay:', err);
+        });
+    }
+}
+
+function stopTacticalExamBgm() {
+    if (!state.bgm) return;
+    state.bgm.pause();
+    state.bgm.currentTime = 0;
 }
 
 export function isSideScrollerAdventureVisible() {
@@ -523,12 +551,17 @@ function drawFritia(ctx, w, h) {
 function drawAdjutantCompanion(ctx, fritiaX, groundY, baseScale) {
     const scale = baseScale * ADJUTANT_COMPANION.scale;
     const gait = createCharacterGait(ADJUTANT_COMPANION.phaseDelay, scale);
+    const x = fritiaX + state.adjutantOffsetX * baseScale;
+    const y = groundY + ADJUTANT_COMPANION.groundOffsetY * baseScale - gait.bob;
+    state.lastAdjutantHitbox = {
+        left: x - 54 * scale,
+        right: x + 58 * scale,
+        top: y - 548 * scale,
+        bottom: y + 34 * scale
+    };
     ctx.save();
     ctx.globalAlpha = ADJUTANT_COMPANION.alpha;
-    ctx.translate(
-        fritiaX + state.adjutantOffsetX * baseScale,
-        groundY + ADJUTANT_COMPANION.groundOffsetY * baseScale - gait.bob
-    );
+    ctx.translate(x, y);
     ctx.scale(state.facing, 1);
     drawCharacterShadow(ctx, scale, 52, 0.82);
     drawRiggedCharacter(ctx, ADJUTANT_COMPANION.rig, gait, scale, ADJUTANT_COMPANION.alpha);
