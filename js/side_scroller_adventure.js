@@ -558,7 +558,10 @@ function drawFritia(ctx, w, h) {
 }
 
 function isCompactCombatViewport() {
-    return Boolean(state.panel?.classList.contains('is-side-combat-active') && state.height <= 540 && state.width >= 760);
+    return Boolean(
+        state.panel?.classList.contains('is-side-combat-compact-wide')
+        || (state.panel?.classList.contains('is-side-combat-active') && state.height <= 540 && state.width >= 760)
+    );
 }
 
 function drawAdjutantCompanion(ctx, fritiaX, groundY, baseScale) {
