@@ -40,6 +40,7 @@ fritia_online_v3/
 │   ├── effects.css        # 动画与点燃光效
 │   ├── panels.css         # 各浮层专属样式 + 浮层 z-index
 │   ├── responsive.css     # 响应式与移动端
+│   ├── mobile_common.css  # 移动端通用 UI（横屏/竖屏共享，不依赖 ml-active）
 │   ├── mobile_landscape.css # 移动端横屏专属布局(独立层，仅 html.ml-active 生效)
 │   └── style.css          # 兼容入口(仅 @import 上述模块)
 ├── js/
@@ -66,6 +67,8 @@ fritia_online_v3/
 │   ├── zip_store.js
 │   ├── game_state.js
 │   ├── gift_system.js
+│   ├── mobile_viewport_fix.js # 移动端横竖屏 viewport 修正（独立 IIFE）
+│   ├── mobile_refresh.js  # 移动端右下角“刷新”按钮与确认框
 │   ├── mobile_landscape.js # 移动端横屏检测(独立 IIFE，切换 html.ml-active + 写视口变量)
 │   ├── main.js
 │   ├── room.js
@@ -336,6 +339,7 @@ npm run dev
 
 - 桌面端使用 `A/D` 或方向键移动，`Escape` 返回房间。
 - 移动端显示左右触控按钮；小游戏打开时隐藏原 3D 触控摇杆，避免输入重叠。
+- `js/mobile_viewport_fix.js` 只处理触屏设备的通用 viewport 回切：横屏转竖屏时恢复竖屏真实宽度，竖屏转横屏时回到 `device-width`，避免页面整体缩小；`js/mobile_refresh.js` 只提供右下角“刷新”按钮与确认弹窗，桌面端不显示。
 - 战术考核打开期间 `#side-scroller-adventure` 会带 `is-side-combat-active`；`js/side_scroller_combat.js#syncCombatViewportClass()` 会按实际宽高与宽高比计算 `--side-combat-ui-scale`，并在宽屏低高度时增加 `is-side-combat-compact-wide` / `is-side-combat-extreme-wide`。`css/responsive.css` 只在这些状态下线性缩小设定弹窗、HUD、手牌、侧边按钮、典藏牌库/规则/排行榜浮窗和卡池列表；极窄横屏会把芙提雅生命 HUD 改为顶部居中低高度血条，保留头像、隐藏状态图标，避免挡住敌方攻击意图。首次进入低高度宽屏时信息卡默认折叠，事件/结算弹窗居中显示，左右侧 UI 会保留安全边距。`side_scroller_adventure.js` 会同步降低角色地面线与角色比例。该适配不作用于其他横板或 3D 功能。
 - 移动端进入战术考核时若检测到竖屏视口，会显示 `#side-scroller-orientation-blocker` 顶层提醒，模糊并阻断底层控件，点击退出按钮关闭战术考核；旋转回横屏后自动隐藏提醒、重算 Canvas 尺寸并播放一次淡入淡出转场。该提醒仅作用于战术考核模式。
 - **移动端横屏专用 UI（独立系统，详见 `UI_MOBILE.md`）**：`js/mobile_landscape.js` 在「触屏设备 + 横屏」时给 `<html>` 挂 `ml-active`（矮屏加 `ml-short`、超宽加 `ml-ultrawide`），写入真实视口变量 `--ml-h/--ml-w/--ml-vh/--ml-vw`，派发 `ml-mode-changed` 事件，暴露只读 `window.FritiaMobileLandscape.isActive()`；`css/mobile_landscape.css`（最后 link）以 `html.ml-active` 前缀，按各悬浮窗口内容逐一压缩标题/底栏并重排控件。各浮层要点：圆桌密语群聊步把状态文字搬到标题副标题、时间条搬到左栏、输入压一行、取消底栏（DOM 搬移由 `mobile_landscape.js` 负责，退出还原）；调酒挑战左右双栏并收紧、隐藏材料类型标签、材料列表自绘滚动条；发起邀请去 PMX 预览框、候选卡缩矮 + 左栏自绘滚动条、隐藏「已选中」说明条；舞曲把底部说明移到顶部；系统设置知识库 FILES/CHUNKS 列表加自绘滚动条可下滚。**战术考核整体沿用 `responsive.css` 既有三层方案**（`max-height:540` 固定块 + `is-side-combat-compact-wide/extreme-wide`），本系统只精准接管两处：把手牌两侧 4 控件（牌库/刷新/弃牌/出牌数）从中心偏移改为锚定到手牌左右边缘（`--ml-hand-w`，竖向抬高错开角按钮、窄屏缩小兜底），并放大卡牌、缩小标题/描述但保留底部数值字号；**不碰 `side_scroller_*.js`**（早期改 Canvas 人物缩放已回退）。该系统与桌面端/竖屏完全解耦，删掉 `index.html` 两行引用即可一键还原。支持 `?ml=1/0` 或 `localStorage.fritia_force_ml` 强制开关（桌面对照测试）。
@@ -1404,6 +1408,8 @@ DOM ID：
 - `#joystick-move-knob`
 - `#btn-interact`
 - `#btn-look`
+- `#mobile-refresh-btn`
+- `#mobile-refresh-confirm`
 
 睡眠：
 
@@ -1623,6 +1629,8 @@ Escape：
 4. 鼠标锁定和移动端触控基础操作可用。
 5. 未点击开局界面前，芙提雅停在初始位置不随机移动；点击进入操作模式后先完成挥手欢迎，再开始后续行动。
 6. 打开任意 overlay 时触发成就，成就卡片应显示在所有窗口和高斯模糊背景之上。
+7. 触屏设备先竖屏进入游戏，再横屏切回竖屏时，页面宽度应恢复为竖屏真实宽度，UI 不应整体缩小；横屏状态仍应正常。
+8. 主界面右下角应出现圆形“刷新”按钮；点击后弹出“是否要重新载入本游戏？”确认框，选“是”应刷新页面，选“否”应关闭弹窗。
 
 共享墙和门：
 

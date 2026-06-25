@@ -1,0 +1,95 @@
+/* =============================================================
+   Mobile common UI
+   - Shared touch-device behavior for both portrait and landscape.
+   - Independent from css/mobile_landscape.css; no ml-active rules here.
+   ============================================================= */
+
+#mobile-refresh-btn {
+    display: none;
+}
+
+#mobile-refresh-btn.mobile-refresh-btn--hidden {
+    display: none !important;
+}
+
+@media (pointer: coarse) {
+    #mobile-refresh-btn {
+        position: fixed;
+        right: max(20px, env(safe-area-inset-right));
+        bottom: max(20px, env(safe-area-inset-bottom));
+        z-index: 21;
+        display: flex;
+        pointer-events: auto;
+    }
+
+    #touch-controls.active ~ #mobile-refresh-btn {
+        bottom: calc(max(20px, env(safe-area-inset-bottom)) + 84px);
+    }
+
+    body.side-scroller-active #mobile-refresh-btn,
+    body.room-panorama-active #mobile-refresh-btn,
+    body.dream-revision-pending #mobile-refresh-btn {
+        display: none !important;
+    }
+
+    .mobile-refresh-confirm {
+        position: fixed;
+        inset: 0;
+        z-index: 180;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgba(10, 10, 16, 0.42);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+    }
+
+    .mobile-refresh-confirm.hidden {
+        display: none !important;
+    }
+
+    .mobile-refresh-confirm__panel {
+        width: min(320px, calc(100vw - 40px));
+        padding: 16px 16px 14px;
+        border-radius: var(--r-md);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: var(--hud-bg-strong);
+        box-shadow: var(--shadow-hud);
+        text-align: center;
+    }
+
+    .mobile-refresh-confirm__panel strong {
+        display: block;
+        margin-bottom: 14px;
+        color: var(--hud-text);
+        font-size: 0.96rem;
+        line-height: 1.45;
+    }
+
+    .mobile-refresh-confirm__actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .mobile-refresh-confirm__btn {
+        min-height: 42px;
+        border-radius: var(--r-pill);
+        border: 1px solid var(--hud-line);
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        touch-action: manipulation;
+    }
+
+    .mobile-refresh-confirm__btn--ghost {
+        color: var(--hud-text);
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .mobile-refresh-confirm__btn--primary {
+        color: #fff;
+        background: var(--grad-rose);
+        border-color: transparent;
+    }
+}
