@@ -212,6 +212,7 @@ export function openSideScrollerCombat() {
     state.visible = true;
     state.root?.classList.remove('hidden');
     state.root?.classList.remove('is-started', 'is-battle', 'is-loading', 'has-visible-hand');
+    state.panel?.classList.add('is-side-combat-active');
     state.panel?.classList.remove('is-side-combat-started', 'is-side-combat-hint-visible');
     renderCombat();
 }
@@ -228,7 +229,7 @@ export function closeSideScrollerCombat() {
     closeStatusPopover();
     closeDeckPopover();
     closeArchivePanel();
-    state.panel?.classList.remove('is-side-combat-started', 'is-side-combat-hint-visible');
+    state.panel?.classList.remove('is-side-combat-active', 'is-side-combat-started', 'is-side-combat-hint-visible');
 }
 
 export function updateSideScrollerCombat(delta) {
@@ -2132,9 +2133,12 @@ function getSpriteEnemyMetrics(enemy, index = 0, spriteEnemies = []) {
     const groundY = panelRect.top - rootRect.top + fritiaHitbox.bottom;
     const area = getSpriteEnemyStandingArea(rootRect, groundY);
     const areaWidth = Math.max(80, area.right - area.left);
-    const maxHeight = rootRect.width <= 700
-        ? rootRect.height * (enemy?.boss ? 0.64 : 0.52)
-        : rootRect.height * (enemy?.boss ? 0.82 : 0.68);
+    const compactHeight = rootRect.width >= 760 && rootRect.height <= 540;
+    const maxHeight = compactHeight
+        ? rootRect.height * (enemy?.boss ? 0.62 : 0.52)
+        : rootRect.width <= 700
+            ? rootRect.height * (enemy?.boss ? 0.64 : 0.52)
+            : rootRect.height * (enemy?.boss ? 0.82 : 0.68);
     const desiredHeight = clampNumber(referenceHeight * variant.heightToAdjutant, 180, maxHeight);
     const desiredWidth = desiredHeight * variant.imageRatio;
     const fitScale = desiredWidth > areaWidth ? areaWidth / desiredWidth : 1;

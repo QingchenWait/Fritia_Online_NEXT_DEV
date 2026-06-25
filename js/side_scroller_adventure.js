@@ -527,8 +527,10 @@ function drawIceCracks(ctx, w, h, horizon) {
 
 function drawFritia(ctx, w, h) {
     if (!state.ready) return;
-    const groundY = h * 0.87;
-    const baseScale = Math.max(0.46, Math.min(0.88, h / 760));
+    const compactCombat = isCompactCombatViewport();
+    const groundY = h * (compactCombat ? 0.8 : 0.87);
+    const compactScale = compactCombat ? Math.max(0.64, Math.min(0.92, h / 520)) : 1;
+    const baseScale = Math.max(0.46, Math.min(0.88, h / 760)) * compactScale;
     const scale = baseScale * CHARACTER_SCALE_FACTOR;
     const x = w * 0.5;
     const fritiaGait = createCharacterGait(0, scale);
@@ -553,6 +555,10 @@ function drawFritia(ctx, w, h) {
     drawFireCompanion(ctx, scale, fireFloatY);
     drawRiggedCharacter(ctx, FRITIA_RIG, fritiaGait, scale, 1);
     ctx.restore();
+}
+
+function isCompactCombatViewport() {
+    return Boolean(state.panel?.classList.contains('is-side-combat-active') && state.height <= 540 && state.width >= 760);
 }
 
 function drawAdjutantCompanion(ctx, fritiaX, groundY, baseScale) {
