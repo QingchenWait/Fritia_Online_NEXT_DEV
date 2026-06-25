@@ -6,6 +6,7 @@ desktop.ini
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 
@@ -13,6 +14,7 @@ desktop.ini
 node_modules/
 ui/
 2D_TEST.png
+apk.keystore
 
 # User data - never commit
 *.env
