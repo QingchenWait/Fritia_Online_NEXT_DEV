@@ -22,19 +22,20 @@ html.ml-active {
     --ml-safe-t: env(safe-area-inset-top, 0px);
     --ml-safe-b: env(safe-area-inset-bottom, 0px);
     --ml-panel-h: calc(var(--ml-h, 100vh) - 10px);
+    --ml-dream-wish-height: clamp(110px, calc(var(--ml-h, 100vh) - 320px), 290px);
 
     /* 战术考核【手牌】卡牌字号（手牌区静置卡牌用）。 */
     --ml-card-title-fs: 0.70rem;   /* 手牌标题（牌名） */
     --ml-card-desc-fs:  0.62rem;   /* 手牌描述（内容） */
     --ml-card-top-fs:   0.56rem;   /* 手牌分类小标（紫·强化 等） */
-    --ml-card-value-fs: 0.66rem;   /* 手牌底部数值（费用/效果数字） */
+    --ml-card-value-fs: 0.63rem;   /* 手牌底部数值（费用/效果数字） */
 
     /* 战术考核【拖动幽灵】卡牌字号（拖动中那张克隆卡片用，独立于手牌、可单独调）。
        默认与手牌一致，所以现在看不出区别；要让拖动卡片字号不同，单独改下面这组即可。 */
     --ml-ghost-title-fs: 0.70rem;  /* 拖动卡片标题 */
     --ml-ghost-desc-fs:  0.62rem;  /* 拖动卡片描述 */
     --ml-ghost-top-fs:   0.56rem;  /* 拖动卡片分类小标 */
-    --ml-ghost-value-fs: 0.66rem;  /* 拖动卡片底部数值 */
+    --ml-ghost-value-fs: 0.63rem;  /* 拖动卡片底部数值 */
 }
 
 /* ============================================================= */
@@ -114,6 +115,197 @@ html.ml-active #settings-panel .settings-view-head { padding: 10px 16px 7px; }
 html.ml-active #settings-panel .settings-foot { padding: 5px 16px; }
 html.ml-active #settings-panel .settings-foot .btn { min-height: 30px; padding-top: 4px; padding-bottom: 4px; }
 
+/* 大模型设置 / 操作设置：横屏下改成类似「高级设置」的紧凑行式表单 */
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] {
+    --ml-model-field-row-h: 52px;
+    --ml-model-form-h: calc(var(--ml-model-field-row-h) * 3 + 2px);
+    align-items: stretch;
+    gap: 0;
+    overflow-anchor: none;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-view-head,
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-view-head {
+    padding: 8px 16px 6px;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-view-head p,
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-view-head p {
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-form-grid {
+    flex: 0 0 var(--ml-model-form-h);
+    max-width: none;
+    width: auto;
+    height: var(--ml-model-form-h);
+    min-height: var(--ml-model-form-h);
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3, var(--ml-model-field-row-h));
+    gap: 0;
+    margin: 10px 16px 8px;
+    padding: 0;
+    border: 1px solid var(--panel-line);
+    border-radius: var(--r-sm);
+    background:
+        linear-gradient(135deg, rgba(255,255,255,0.62), rgba(251,233,236,0.28)),
+        rgba(255,250,247,0.56);
+    overflow: hidden;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .otome-field {
+    min-height: var(--ml-model-field-row-h);
+    height: var(--ml-model-field-row-h);
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+    padding: 8px 11px;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .otome-field + .otome-field {
+    border-top: 1px solid rgba(229,138,166,0.15);
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .otome-field-label {
+    margin: 0;
+    color: var(--c-ink);
+    font-size: 0.8rem;
+    font-weight: 800;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-form-grid input {
+    min-height: 34px;
+    height: 34px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 16px;
+    line-height: 1.2;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-api-card,
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-intimate-card {
+    position: static;
+    inset: auto;
+    flex: 0 0 auto;
+    align-self: stretch;
+    max-width: none;
+    width: auto;
+    margin: 0 16px 8px;
+    padding: 9px 11px;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-api-card {
+    grid-template-columns: minmax(170px, 0.9fr) minmax(0, 1.4fr);
+    align-items: center;
+    gap: 8px 10px;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-api-card strong {
+    font-size: 0.82rem;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-api-card span {
+    font-size: 0.7rem;
+    line-height: 1.32;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-api-links {
+    justify-content: flex-start;
+    gap: 6px;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-api-link {
+    min-height: 28px;
+    padding: 4px 9px;
+    font-size: 0.7rem;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-intimate-card {
+    position: relative;
+    min-height: 64px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 2px 12px;
+    overflow: hidden;
+    overflow-anchor: none;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-intimate-card input {
+    top: 50%;
+    right: 24px;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    transform: translateY(-50%);
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-intimate-card .settings-intimate-switch {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    justify-self: end;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-intimate-card span:last-child {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    align-self: center;
+    gap: 4px;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-intimate-card strong {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 0.8rem;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="model"] .settings-intimate-card small {
+    display: block;
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 0.68rem;
+    line-height: 1.3;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-control-panel {
+    max-width: none;
+    margin: 10px 16px;
+    padding: 0;
+    gap: 0;
+    border: 1px solid var(--panel-line);
+    border-radius: var(--r-sm);
+    background:
+        linear-gradient(135deg, rgba(255,255,255,0.62), rgba(251,233,236,0.28)),
+        rgba(255,250,247,0.56);
+    overflow: hidden;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-slider-row {
+    grid-template-columns: minmax(150px, 0.85fr) minmax(230px, 0.95fr);
+    grid-template-rows: auto auto;
+    gap: 4px 10px;
+    padding: 9px 11px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-slider-row + .settings-slider-row {
+    margin-top: 0;
+    border-top: 1px solid rgba(229,138,166,0.15);
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-slider-row span {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    gap: 2px;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-slider-row strong {
+    font-size: 0.8rem;
+    line-height: 1.25;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-slider-row small {
+    font-size: 0.67rem;
+    line-height: 1.25;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-slider-row input[type="range"] {
+    grid-column: 2;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+    align-self: end;
+}
+html.ml-active #settings-panel .settings-view[data-settings-view="controls"] .settings-slider-row em {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: start;
+    min-width: 58px;
+    padding: 4px 7px;
+    font-size: 0.7rem;
+}
 /* 知识库工作台：列表(左) 与 详情(右) 各自独立滚动 + 自绘滚动条
    —— 既有桌面是 flex:1 + overflow:hidden 的层层裁剪链，短横屏会把 FILES/CHUNKS 内容裁成 0 只剩标题。
       这里固定工作台高度，并把详情链改成"自然高度 + kb-main 整体滚动"，让具体文件/分块可见。 */
@@ -167,34 +359,37 @@ html.ml-active #settings-panel #kb-file-list::-webkit-scrollbar-track,
 html.ml-active #settings-panel #kb-chunk-list::-webkit-scrollbar-track { background: transparent; }
 
 /* 「更多资源」(INFO 视图)：横屏改为左右两栏
-   —— 左栏 = LOGO + 标题(截图蓝框内容，适当缩小)；右栏 = 副标题 + 制作信息 + 4 个资源按钮(2×2)。
-   纯 CSS：把居中单列的 .settings-resources-page 改成 2 列网格，按 DOM 顺序(logo/标题/副标题/about/links)显式定位。
-   关键：LOGO 跨 1-2 行且 align-self:end，使其底部贴着第 3 行的标题；右栏三项各占一行、保持紧凑堆叠，
-        不会被 LOGO 的高度撑出空隙(网格行高由各自内容决定)。 */
+   —— 左栏 = LOGO + 标题整体居中；右栏 = 副标题 + 制作信息 + 4 个资源按钮(2×2)。 */
 html.ml-active #settings-panel .settings-resources-page {
+    --ml-resources-logo-size: clamp(66px, calc(var(--ml-h, 100vh) * 0.20), 118px);
     width: 100%;
     max-width: none;
     margin: 0;
     padding: 14px 20px 16px;
-    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
-    column-gap: 22px;
+    grid-template-columns: minmax(220px, 0.56fr) minmax(0, 1.44fr);
+    grid-template-rows: auto auto minmax(0, auto);
+    column-gap: 18px;
     row-gap: 8px;
     justify-items: stretch;
     align-content: start;   /* 顶对齐：短横屏下不会因居中把首行顶出裁剪区 */
     text-align: left;
 }
-/* 左栏：LOGO(跨 1-2 行) + 标题(第 3 行) */
+/* 左栏：LOGO + 标题作为一个视觉组，跨右栏三行居中。 */
 html.ml-active #settings-panel .settings-resources-logo-wrap {
-    grid-column: 1; grid-row: 1 / 3;
-    align-self: end; justify-self: center;
-    width: clamp(66px, calc(var(--ml-h, 100vh) * 0.20), 140px);
+    grid-column: 1; grid-row: 1 / 4;
+    align-self: center; justify-self: center;
+    width: var(--ml-resources-logo-size);
     margin-bottom: 0;
+    transform: translateY(-30px);
 }
 html.ml-active #settings-panel .settings-resources-title {
-    grid-column: 1; grid-row: 3;
-    align-self: start; justify-self: center;
+    grid-column: 1; grid-row: 1 / 4;
+    align-self: center; justify-self: center;
     margin: 0;
+    width: 100%;
+    text-align: center;
     font-size: clamp(1.15rem, 2.3vw, 1.6rem);
+    transform: translateY(58px);
 }
 /* 右栏：副标题 + 制作信息 + 资源按钮 */
 html.ml-active #settings-panel .settings-resources-subtitle {
@@ -207,8 +402,8 @@ html.ml-active #settings-panel #settings-about-text {
     grid-column: 2; grid-row: 2;
     width: 100%;
     text-align: left;
-    font-size: 0.74rem;
-    line-height: 1.6;
+    font-size: 0.73rem;
+    line-height: 1.56;
 }
 html.ml-active #settings-panel .settings-resource-links {
     grid-column: 2; grid-row: 3;
@@ -380,8 +575,8 @@ html.ml-active #dream-terminal-panel .otome-panel { width: min(960px, 96vw); }
 html.ml-active #dream-terminal-panel .dream-grid { gap: var(--sp-3); }
 html.ml-active #dream-terminal-panel .dream-wish-console,
 html.ml-active #dream-terminal-panel .dream-forge-console { padding: var(--sp-3) var(--sp-4); }
-/* 左栏：家具愿望文本框压矮（用 flex:none + 固定高度，覆盖既有 flex:1 撑满整列） */
-html.ml-active #dream-terminal-panel #dream-furniture-description { flex: none; min-height: 0; height: clamp(70px, calc(var(--ml-h, 100vh) - 360px), 250px); }
+/* 左栏：家具愿望文本框用独立变量定高，覆盖既有 flex:1 撑满整列 */
+html.ml-active #dream-terminal-panel #dream-furniture-description { flex: none; min-height: 0; height: var(--ml-dream-wish-height); }
 html.ml-active #dream-terminal-panel #dream-template-strip { margin-top: var(--sp-2); gap: 6px; }
 html.ml-active #dream-terminal-panel .dream-hint-strip { margin-top: var(--sp-2); font-size: 0.7rem; line-height: 1.35; }
 /* 右栏：打造参数各控件压矮 */
@@ -443,11 +638,19 @@ html.ml-active.ml-short #dialogue-text-area { max-height: 26vh; }
 html.ml-active #side-scroller-adventure {
     /* 手牌宽度自管：两侧各留 ~150px 给"夹层控件 + 角落按钮" */
     --ml-hand-w: min(470px, calc(100vw - 300px));
+    /* 夹层圆钮离手牌边缘的水平间距；调大更远，调小更近 */
+    --ml-fbtn-gap: 14px;
+    --ml-deck-popover-w: min(240px, calc(100vw - 32px));
     /* 夹层圆钮尺寸（窄屏再缩小，见 ml-short/ml-ultrawide） */
     --ml-fbtn: 46px;
     /* 夹层控件竖向锚点：抬到底部角按钮(信息/结束回合)之上，避免水平相撞 */
     --ml-fbtn-b1: 74px;
     --ml-fbtn-b2: calc(74px + var(--ml-fbtn) + 8px);
+}
+
+/* 移动横屏卡牌模式：左上角标题卡片占用视野，隐藏；右上角返回按钮保留。 */
+html.ml-active #side-scroller-adventure.is-side-combat-active .side-scroller-title {
+    display: none;
 }
 
 /* ---- 手牌：本系统接管宽度，便于精确把控件贴到卡牌两侧 ---- */
@@ -478,6 +681,14 @@ html.ml-active .side-combat-card.is-drag-ghost small { font-size: var(--ml-ghost
 html.ml-active .side-combat-card.is-drag-ghost .side-combat-card__top { font-size: var(--ml-ghost-top-fs); }
 html.ml-active .side-combat-card.is-drag-ghost .side-combat-card__value { font-size: var(--ml-ghost-value-fs); }
 
+/* ---- Deck popover: only shrink the window/list viewport; keep item rows unchanged. ---- */
+html.ml-active #side-scroller-adventure .side-combat-tooltip--deck {
+    width: var(--ml-deck-popover-w);
+}
+html.ml-active #side-scroller-adventure .side-combat-deck-list {
+    max-height: var(--ml-deck-list-h, none);
+}
+
 /* ---- 手牌两侧 4 控件：贴着卡牌左右排成两组竖直小簇 ---- */
 /* 通用：统一尺寸、清掉旧的中心偏移/底部定位 */
 html.ml-active #side-scroller-adventure .side-combat-deck-toggle,
@@ -491,20 +702,20 @@ html.ml-active #side-scroller-adventure .side-combat-play-count {
 }
 /* 左簇（贴手牌左侧）：刷新(下) + 牌库(上) */
 html.ml-active #side-scroller-adventure .side-combat-refresh-round {
-    right: calc(50% + var(--ml-hand-w) / 2 + 8px);
+    right: calc(50% + var(--ml-hand-w) / 2 + var(--ml-fbtn-gap));
     bottom: var(--ml-fbtn-b1);
 }
 html.ml-active #side-scroller-adventure .side-combat-deck-toggle {
-    right: calc(50% + var(--ml-hand-w) / 2 + 8px);
+    right: calc(50% + var(--ml-hand-w) / 2 + var(--ml-fbtn-gap));
     bottom: var(--ml-fbtn-b2);
 }
 /* 右簇（贴手牌右侧）：弃牌(下) + 出牌数(上) */
 html.ml-active #side-scroller-adventure .side-combat-discard {
-    left: calc(50% + var(--ml-hand-w) / 2 + 8px);
+    left: calc(50% + var(--ml-hand-w) / 2 + var(--ml-fbtn-gap));
     bottom: var(--ml-fbtn-b1);
 }
 html.ml-active #side-scroller-adventure .side-combat-play-count {
-    left: calc(50% + var(--ml-hand-w) / 2 + 8px);
+    left: calc(50% + var(--ml-hand-w) / 2 + var(--ml-fbtn-gap));
     bottom: var(--ml-fbtn-b2);
     padding: 0 6px;
     font-size: 0.9rem;
