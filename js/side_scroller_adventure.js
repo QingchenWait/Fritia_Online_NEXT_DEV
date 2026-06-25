@@ -345,7 +345,7 @@ function handleViewportChange() {
 
 function syncOrientationWarning() {
     if (!state.visible || !state.panel || !state.orientationBlocker) return;
-    const shouldBlock = isMobileLandscapeViewport();
+    const shouldBlock = isMobilePortraitViewport();
     const wasBlocked = state.orientationBlocked;
     state.orientationBlocked = shouldBlock;
     if (shouldBlock) {
@@ -370,12 +370,12 @@ function hideOrientationWarning() {
     state.orientationBlocker?.classList.add('hidden');
 }
 
-function isMobileLandscapeViewport() {
+function isMobilePortraitViewport() {
     const coarse = window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
     if (!coarse) return false;
     const width = window.innerWidth || state.width || 0;
     const height = window.innerHeight || state.height || 0;
-    return width > height;
+    return height > width;
 }
 
 function requestCloseAdventure() {

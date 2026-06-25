@@ -334,7 +334,7 @@ npm run dev
 - 桌面端使用 `A/D` 或方向键移动，`Escape` 返回房间。
 - 移动端显示左右触控按钮；小游戏打开时隐藏原 3D 触控摇杆，避免输入重叠。
 - 战术考核打开期间 `#side-scroller-adventure` 会带 `is-side-combat-active`；`js/side_scroller_combat.js#syncCombatViewportClass()` 会按实际宽高与宽高比计算 `--side-combat-ui-scale`，并在宽屏低高度时增加 `is-side-combat-compact-wide` / `is-side-combat-extreme-wide`。`css/responsive.css` 只在这些状态下线性缩小设定弹窗、HUD、手牌、侧边按钮、典藏牌库/规则/排行榜浮窗和卡池列表；极窄横屏会把芙提雅生命 HUD 改为顶部居中低高度血条，保留头像、隐藏状态图标，避免挡住敌方攻击意图。首次进入低高度宽屏时信息卡默认折叠，事件/结算弹窗居中显示，左右侧 UI 会保留安全边距。`side_scroller_adventure.js` 会同步降低角色地面线与角色比例。该适配不作用于其他横板或 3D 功能。
-- 移动端进入战术考核时若检测到横屏视口，会显示 `#side-scroller-orientation-blocker` 顶层提醒，模糊并阻断底层控件，点击退出按钮关闭战术考核；旋转回竖屏后自动隐藏提醒、重算 Canvas 尺寸并播放一次淡入淡出转场。该提醒仅作用于战术考核模式。
+- 移动端进入战术考核时若检测到竖屏视口，会显示 `#side-scroller-orientation-blocker` 顶层提醒，模糊并阻断底层控件，点击退出按钮关闭战术考核；旋转回横屏后自动隐藏提醒、重算 Canvas 尺寸并播放一次淡入淡出转场。该提醒仅作用于战术考核模式。
 - v1 不保存玩家横板位置、战斗路线、手牌、生命值和战斗风格；典藏牌库会持久化永久收藏卡牌和 4 张带入对局选择，并进入导出/导入 JSON。
 - 第一次卡牌生成完成前隐藏芙提雅血量、事件路线、信息卡片、分析员技能、结束回合按钮和底部操作提示；生成完成后进入 `walk/encounter` 阶段才显示底部操作提示，进入 `battle` 出牌阶段后隐藏该提示。
 
