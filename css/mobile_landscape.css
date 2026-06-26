@@ -770,3 +770,163 @@ html.ml-active.ml-short #side-scroller-adventure {
     --ml-fbtn: 42px;
     --ml-fbtn-b1: 66px;
 }
+
+/* -------------------------------------------------------------------------
+   记忆节点：移动端横屏专属工作台
+   ------------------------------------------------------------------------- */
+html.ml-active #memory-node-panel .otome-panel {
+    width: min(1100px, 96vw);
+    height: var(--ml-panel-h);
+}
+
+html.ml-active #memory-node-panel .memory-node-head .otome-panel__actions {
+    gap: 7px;
+}
+
+html.ml-active #memory-node-panel #memory-node-stats {
+    display: none;
+}
+
+html.ml-active #memory-node-panel .memory-node-body {
+    grid-template-columns: minmax(210px, 0.36fr) minmax(0, 1fr);
+}
+
+html.ml-active #memory-node-panel .memory-command-panel {
+    padding: 10px;
+    gap: 8px;
+}
+
+html.ml-active #memory-node-panel .memory-search-console,
+html.ml-active #memory-node-panel .memory-node-card {
+    padding: 10px;
+}
+
+html.ml-active #memory-node-panel .memory-search-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+
+html.ml-active #memory-node-panel .memory-search-row .btn {
+    min-height: 34px;
+}
+
+html.ml-active #memory-node-panel .memory-node-detail {
+    max-height: calc(var(--ml-h) - 238px);
+}
+
+html.ml-active #memory-node-panel .memory-edge-pill {
+    padding: 6px 8px;
+    font-size: 0.7rem;
+}
+
+html.ml-active #memory-node-panel .memory-result-panel,
+html.ml-active #memory-node-panel .memory-settings-popover,
+html.ml-active #memory-node-panel .memory-archive-popover {
+    top: 10px;
+    right: 10px;
+    left: auto;
+    width: min(320px, 42vw);
+    max-height: calc(var(--ml-h) - 24px);
+    padding: 10px;
+}
+
+html.ml-active #memory-node-panel .memory-archive-popover {
+    width: min(520px, calc(100vw - 250px));
+    display: grid;
+    grid-template-columns: minmax(138px, 0.38fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 9px;
+}
+
+html.ml-active #memory-node-panel .memory-archive-popover.hidden {
+    display: none;
+}
+
+html.ml-active #memory-node-panel .memory-archive-popover .memory-result-head {
+    grid-column: 1 / -1;
+}
+
+html.ml-active #memory-node-panel .memory-archive-toolbar {
+    min-width: 0;
+    gap: 8px;
+}
+
+html.ml-active #memory-node-panel .memory-archive-search-field {
+    gap: 4px;
+    font-size: 0.64rem;
+}
+
+html.ml-active #memory-node-panel .memory-archive-search-field input {
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 16px;
+}
+
+html.ml-active #memory-node-panel .memory-archive-filter {
+    grid-template-columns: 1fr;
+    gap: 5px;
+}
+
+html.ml-active #memory-node-panel .memory-archive-filter button {
+    min-height: 30px;
+    padding: 4px 6px;
+    font-size: 0.66rem;
+}
+
+html.ml-active #memory-node-panel .memory-archive-list {
+    min-height: 0;
+    max-height: calc(var(--ml-h) - 92px);
+}
+
+html.ml-active #memory-node-panel .memory-archive-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px;
+}
+
+html.ml-active #memory-node-panel .memory-archive-text {
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+
+html.ml-active #memory-node-panel .memory-archive-meta {
+    gap: 4px;
+    margin-top: 5px;
+}
+
+html.ml-active #memory-node-panel .memory-archive-meta span {
+    font-size: 0.58rem;
+    padding: 2px 5px;
+}
+
+html.ml-active #memory-node-panel .memory-archive-delete {
+    min-height: 32px;
+    padding: 5px 8px;
+    font-size: 0.66rem;
+}
+
+html.ml-active #memory-node-panel .memory-result-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 8px;
+}
+
+html.ml-active #memory-node-panel .memory-result-item strong {
+    font-size: 0.72rem;
+}
+
+html.ml-active #memory-node-panel .memory-result-item .btn {
+    min-height: 30px;
+}
+
+html.ml-active #memory-node-panel #memory-setting-keywords {
+    min-height: 72px;
+    max-height: calc(var(--ml-h) - 254px);
+}
+
+html.ml-active.ml-short #memory-node-panel .memory-node-body {
+    grid-template-columns: minmax(190px, 0.32fr) minmax(0, 1fr);
+}
+
+html.ml-active.ml-short #memory-node-panel .memory-graph-hint {
+    display: none;
+}

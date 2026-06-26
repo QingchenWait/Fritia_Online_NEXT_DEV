@@ -93,6 +93,7 @@ export function initControls(camera, domElement, colliders) {
         'dialogue-ui',
         'settings-panel',
         'history-panel',
+        'memory-node-panel',
         'model-selector',
         'dance-panel',
         'bar-guest-panel',

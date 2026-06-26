@@ -2272,3 +2272,311 @@
         left: calc(50% + 352px);
     }
 }
+
+@media (max-width: 820px) {
+    #memory-node-panel.ui-overlay {
+        padding: 10px;
+    }
+
+    .memory-node-shell {
+        width: 100%;
+        height: min(94vh, 920px);
+    }
+
+    .memory-node-head .otome-panel__actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .memory-node-head #memory-node-stats {
+        display: none;
+    }
+
+    .memory-node-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .memory-command-panel {
+        border-right: 0;
+        border-bottom: 1px solid var(--panel-line);
+        padding: 12px;
+        gap: 10px;
+        max-height: 238px;
+        overflow-y: auto;
+    }
+
+    .memory-node-card {
+        min-height: 110px;
+    }
+
+    .memory-graph-stage {
+        min-height: 0;
+    }
+
+    .memory-result-panel,
+    .memory-settings-popover,
+    .memory-archive-popover {
+        left: 12px;
+        right: 12px;
+        top: auto;
+        bottom: 12px;
+        width: auto;
+        max-height: min(52vh, 360px);
+    }
+
+    .memory-archive-popover {
+        max-height: min(66vh, 520px);
+        padding: 12px;
+    }
+
+    .memory-archive-filter {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px;
+    }
+
+    .memory-archive-filter button {
+        min-height: 34px;
+        padding: 5px 4px;
+        font-size: 0.68rem;
+    }
+
+    .memory-archive-item {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        padding: 9px;
+    }
+
+    .memory-archive-text {
+        font-size: 0.78rem;
+    }
+
+    .memory-archive-meta span {
+        font-size: 0.6rem;
+        padding: 3px 6px;
+    }
+
+    .memory-archive-delete {
+        min-width: 54px;
+        min-height: 38px;
+    }
+
+    .memory-result-item {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .memory-result-item .btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+    .memory-node-shell {
+        height: calc(100dvh - 16px);
+        max-height: none;
+    }
+
+    .memory-node-head .otome-panel__sub,
+    .memory-node-head .otome-panel__kicker {
+        display: none;
+    }
+
+    .memory-command-panel {
+        max-height: 178px;
+        overflow: visible;
+        padding: 10px 12px;
+    }
+
+    .memory-search-console {
+        position: absolute;
+        left: 14px;
+        bottom: 14px;
+        z-index: 5;
+        width: auto;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        pointer-events: none;
+    }
+
+    .memory-search-console .otome-field-label {
+        display: none;
+    }
+
+    .memory-search-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 0;
+        pointer-events: auto;
+    }
+
+    .memory-search-toggle {
+        display: grid;
+        place-items: center;
+        flex: 0 0 58px;
+        width: 58px;
+        height: 58px;
+        border-radius: var(--r-pill);
+        border: 2px solid rgba(199,92,128,0.34);
+        color: var(--c-rose-deep);
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,244,248,0.9)),
+            rgba(255,255,255,0.86);
+        box-shadow: 0 10px 22px rgba(199,92,128,0.18);
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .memory-search-toggle img,
+    .memory-search-btn-icon {
+        width: 25px;
+        height: 25px;
+    }
+
+    .memory-search-row input,
+    .memory-search-row .btn {
+        opacity: 0;
+        transform: translateX(-8px);
+        pointer-events: none;
+        transition:
+            opacity var(--t-fast) var(--ease-out),
+            transform var(--t-fast) var(--ease-out);
+    }
+
+    .memory-search-console.is-compact-open .memory-search-row input,
+    .memory-search-console.is-compact-open .memory-search-row .btn {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+    }
+
+    .memory-search-row input {
+        width: min(220px, calc(100vw - 142px));
+        min-height: 46px;
+        border-radius: var(--r-pill);
+        padding: 8px 15px;
+        font-size: 16px;
+        box-shadow: 0 10px 24px rgba(199,92,128,0.12);
+    }
+
+    .memory-search-row .btn {
+        display: grid;
+        place-items: center;
+        width: 46px;
+        min-width: 46px;
+        height: 46px;
+        min-height: 46px;
+        padding: 0;
+        border-radius: var(--r-pill);
+        box-shadow: 0 10px 22px rgba(199,92,128,0.18);
+    }
+
+    #memory-search-btn .memory-search-btn-icon {
+        display: block;
+    }
+
+    .memory-search-btn-text {
+        display: none;
+    }
+
+    .memory-node-card {
+        min-height: 150px;
+        flex: 1 1 auto;
+    }
+
+    .memory-node-detail {
+        min-height: 86px;
+    }
+
+    .memory-node-head .otome-panel__actions {
+        gap: 6px;
+    }
+
+    #memory-archive-btn,
+    #memory-settings-btn {
+        min-height: 34px;
+        padding: 6px 12px;
+        font-size: 0.78rem;
+    }
+
+    .memory-archive-popover {
+        left: 8px;
+        right: 8px;
+        bottom: 92px;
+        max-height: min(60dvh, 500px);
+        border-radius: 18px 18px var(--r-md) var(--r-md);
+    }
+
+    .memory-result-panel,
+    .memory-settings-popover {
+        left: 12px;
+        right: 12px;
+        bottom: 92px;
+        max-height: min(48dvh, 340px);
+        border-radius: 18px;
+    }
+
+    .memory-archive-toolbar {
+        gap: 8px;
+    }
+
+    .memory-archive-search-field {
+        gap: 4px;
+        font-size: 0.68rem;
+    }
+
+    .memory-archive-search-field input {
+        min-height: 38px;
+        padding: 7px 10px;
+        border-radius: 10px;
+    }
+
+    #memory-setting-retention,
+    #memory-setting-keywords {
+        min-height: 38px;
+        padding: 7px 10px;
+        border-radius: 10px;
+        font-size: 16px;
+    }
+
+    #memory-setting-keywords {
+        min-height: 76px;
+        max-height: min(22dvh, 132px);
+    }
+
+    .memory-archive-filter {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .memory-archive-item {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .memory-archive-delete {
+        width: 100%;
+    }
+
+    #memory-settings-save {
+        width: 100%;
+    }
+
+    #memory-search-input,
+    #memory-archive-search,
+    #memory-setting-retention,
+    #memory-setting-keywords {
+        font-size: 16px;
+    }
+
+    .memory-graph-hint {
+        left: auto;
+        right: 12px;
+        width: min(300px, calc(100vw - 100px));
+        bottom: 10px;
+        text-align: right;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}

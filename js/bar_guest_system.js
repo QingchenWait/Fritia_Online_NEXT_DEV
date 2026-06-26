@@ -4,6 +4,7 @@ import { loadCharacterFromModel, updateCharacter, getCharacterPosition, startInt
 import { getSettings } from './settings.js';
 import { getGameTimeContext, recordDialogueInteraction } from './game_state.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
+import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
 
 const CHERNO_CARD_ID = 'special:cherno';
 const CHERNO_MODEL_PATH = 'src/_char_card/Cherno/悖谬-见习侍奉.pmx';
@@ -1158,6 +1159,14 @@ async function sendGuestMessage() {
             recentMessages: history,
             limit: 5
         });
+        const memoryMessage = await buildLongTermMemoryMessage({
+            mode: 'bar',
+            query: msg,
+            recentMessages: history,
+            characterId: runtime.card.id,
+            characterName: runtime.card.name,
+            limit: 5
+        });
         const response = await fetch(`${settings.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
@@ -1169,6 +1178,7 @@ async function sendGuestMessage() {
                 messages: [
                     { role: 'system', content: buildGuestSystemPrompt(runtime) },
                     ...(ragMessage ? [ragMessage] : []),
+                    ...(memoryMessage ? [memoryMessage] : []),
                     ...history
                 ],
                 stream: true,
@@ -1203,9 +1213,20 @@ async function sendGuestMessage() {
                 } catch {}
             }
         }
-        state.barHistory.push(createMessage('assistant', fullText, runtime.card.id, runtime.card.name));
+        const assistantMsg = createMessage('assistant', fullText, runtime.card.id, runtime.card.name);
+        state.barHistory.push(assistantMsg);
         saveBarHistory();
-        if (fullText.trim()) recordDialogueInteraction('bar', fullText);
+        if (fullText.trim()) {
+            recordLongTermMemoryTurn({
+                source: 'bar',
+                userText: msg,
+                assistantText: fullText,
+                characterId: runtime.card.id,
+                characterName: runtime.card.name,
+                sourceMessageIds: [`${userMsg.ts}:user:${runtime.card.id}`, `${assistantMsg.ts}:assistant:${runtime.card.id}`]
+            });
+            recordDialogueInteraction('bar', fullText);
+        }
     } catch (err) {
         thinking.remove();
         appendGuestSystemMessage(`请求失败：${err.message}`);

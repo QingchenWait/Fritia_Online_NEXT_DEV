@@ -1813,3 +1813,55 @@ Escape：
 - `character.js`
   - 旧房间床坐下深度由 `STATIC_BED_SIT_EDGE_INSET` 控制；数值越大，角色坐得越往床里面；数值越小，越靠外。
   - 造梦床平躺的进入深度由 `DREAM_BED_LIE_EDGE_INSET` 控制，和旧房间床坐姿分开。
+
+## 2026-06-26 长期记忆系统补充
+
+- `long_term_memory.js`
+  - 新增纯前端长期记忆系统，使用 `localStorage.fritia_long_term_memory` 保存 `{ version, extractorVersion, updatedAt, settings, memories, edges, deletedIds }`。
+  - 默认 `settings.enabled=true`、`retentionDays=60`、`blockedKeywords=[]`、`includeIntimate=false`。
+  - 私聊 scope 为 `private:<characterId>`；圆桌密语公共 scope 为 `public:roundtable`。私聊记忆只给对应 bot 检索，公共记忆可被所有 bot 检索。
+  - 采集使用确定性规则，不调用 LLM，不使用 embedding，不执行任何模型输出代码。
+  - `extractorVersion=11` 使用浏览器系统语言 `Intl.Segmenter(locale, { granularity:'word' })` + 内置回退规则抽取关键词；检索仍使用轻量 token/CJK gram，图谱节点不再直接使用 CJK gram。
+  - 图谱构建改为成熟长期记忆系统常见的 `episode/text-first -> sparse keyword index -> evidence promotion graph`：每轮对话先作为原文 memory 保存，明确偏好、计划、称呼、生日、工作、学校、住址等表达直接生成高置信事实边；普通闲聊只参与关键词聚合，只有同一 scope 下至少 3 条原文 memory 反复支撑的主题才晋升为 `常聊到` / `共同聊到` 派生边。
+  - 派生主题边每次保存时从当前 `memories` 重新生成，按证据数、关键词质量和新近度排序，并限制每个 scope 的晋升主题数量，避免单句分词直接落图导致节点爆炸。
+  - 文本 summary 不强制生成默认边，实体/关键词清洗会过滤“哪约会 / 去哪约会 / 什么吗 / 我看可以 / 那就走吧 / 今天想聊 / 我记住 / 对分析员来说很重要”等疑问或上下文壳片段。
+  - 加载旧版长期记忆时保留 `memories`，按当前抽取器重建 `edges`，并继续尊重 `deletedIds`，已删除关系或来源记忆不会复活。
+  - 每条 `edge` 保存 `sourceMemoryIds`；每条 `memory` 保存 `sourceMessageIds/source/scope/characterId/createdAt/updatedAt/speakerRole/speakerId/speakerName/addresseeId/addresseeName`。
+  - 新采集会把一轮对话拆成 player / assistant(bot) / system episode 分别入档：玩家发言显示为“分析员在某场景中提到”，bot 发言显示为“角色在某场景中回应”，约会开场等合成事件显示为“系统事件”，避免把 bot 自己说的话错误包装成“分析员提到”。
+  - `你/分析员/@对象` 的指代只用于人物关系边和有明确共同承载物的互动边，不用于替别人断言普通事实。例：玩家私聊说“最喜欢你了”生成“分析员 -> 喜欢 -> 当前 bot”；圆桌 bot 对 `@芙提雅` 说“谢谢你昨天的做饭教学”可生成“芙提雅 -> 做饭教学 -> 该 bot”。“你喜欢红茶”这类对对方的陈述或提问不生成事实边。
+  - 互动事实使用轻量事件节点承载，避免拆成不等价三元组。例：bot 说“昨天送了你一件礼物”会生成“bot -> 送出者 -> 事件:昨天bot赠送分析员”、“分析员 -> 接收者 -> 事件:昨天bot赠送分析员”、“事件 -> 物品 -> 礼物”，原文仍保存在文本文档记忆中。
+  - 当 bot 用名字称呼对话对象时，该名字不作为事实边 head；例如“早上好，分析员记得好好记录我的心跳数据哦”只保留文本记忆，不生成“分析员/芙提雅 -> 记得 -> ...”这类错位事实边。
+  - 昵称使用独立昵称边建模，并且业务边统一指向角色主节点。例：“最喜欢小琴诺了”生成“分析员 -> 喜欢 -> 琴诺”和“琴诺 -> 昵称 -> 小琴诺”；“小老师”同样作为“芙提雅 -> 昵称 -> 小老师”展示，搜索昵称时会等价召回角色主节点关系。
+  - v11 增加本地中文 OIE 防误抽门控：参考 LTP/HanLP/APRCOIE 这类中文信息抽取系统的“分词/词性/依存后按 `SBV/VOB/ATT/POB/CMP` 等句法关系取论元”思路，但不引入模型文件、后端或 WASM 依赖。完整中文规则集依赖外部 NLP pipeline，不能在纯静态轻量约束下原样移植，因此本项目只保留无依赖门控：程度补语、动结/趋向补语、语气尾片段不能作为尾实体；同一轮玩家明确问“你喜欢我吗？”时，bot 的省略回答可以继承问句论元生成 `bot -> 喜欢/不喜欢 -> 分析员`，旧存档重建不凭单条 bot 回复猜上下文。
+  - 旧版混合文本 memory（形如“角色记住分析员提到：玩家+bot 混合文本”）在 v6 加载时迁移为“角色相关对话记录：...”，标记为 `speakerRole=mixed`，只保留文本检索和档案管理，不再参与事实边或派生主题边重建。
+  - 搜索结果中删除实体关系会级联删除该关系、其来源 memories、失去来源的 edges，并把删除 id 写入 `deletedIds`，导入旧存档时不会复活。
+  - 新增 `deleteLongTermMemoryMemory(memoryId)` 与 `getOrphanMemories(store)`；档案窗口删除单条 memory 无需二次确认，会从所有 `edge.sourceMemoryIds` 中移除该 id，失去来源的 edge 同步删除并写入 `deletedIds`。
+  - 导出字段为 `longTermMemory`；导入兼容 `longTermMemory` / `longTermMemories`，按 id 合并，坏记录跳过。
+
+- 对话注入
+  - `dialogue.js`、`date_dialogue.js`、`bar_guest_system.js`、`roundtable_whispers.js` 在原知识库 RAG 后追加长期记忆 system 参考消息。
+  - 注入顺序固定为：角色 system -> 原知识库 RAG -> 长期记忆 RAG -> 亲密模式 user -> 历史/状态。
+  - assistant/bot 成功落库后才采集本轮长期记忆；未配置 API Key、请求失败或空回复不会新增长期记忆。
+  - 亲密模式内容默认不录入，除非在记忆节点设置中开启“允许录入亲密模式内容”。
+
+- UI / DOM
+  - 新增 `#memory-node-panel` 全屏浮层和 `#memory-node-prompt` 书桌快捷提示。
+  - 新增 `#memory-archive-btn`、`#memory-archive-popover`、`#memory-archive-close`、`#memory-archive-search`、`#memory-archive-filter`、`#memory-archive-list`，用于浏览、搜索和删除长期记忆 `memories`，默认筛选“未入图谱”。
+  - 实体搜索支持头实体、尾实体和关系文本命中；列表排序固定为头实体命中在前、尾实体命中随后、关系命中最后。点击尾实体命中的结果会选中尾节点。
+  - 节点详情列表中的每条三元组右侧带 `icon_trash.svg` 小删除按钮；点击后二次确认，并复用 `deleteLongTermMemoryEdge()` 级联删除该 edge 及其来源 memories。
+  - 移动端竖屏下，实体搜索改为左下角圆形搜索按钮；点击后展开紧凑输入框和确认按钮，搜索结果、记忆档案和设置浮窗上移避免遮挡底部输入。按钮图标为 `src/_ui/icon_search.svg` 和 `src/_ui/icon_check.svg`，对号按钮只在竖屏紧凑搜索中显示。
+  - 玩家在旧房间看向书桌时，`E` 仍打开今日约会行程，`1` 打开“记忆节点”窗口。
+  - `#memory-node-panel` 已加入 `controls.js` overlay 管理列表；关闭时派发 `fritia-overlay-closed`。
+  - `#memory-graph-canvas` 每帧校验 CSS rect / DPR / canvas 像素尺寸，并监听 `resize`、`orientationchange`、`visualViewport.resize`、`ml-mode-changed` 和 `ResizeObserver`；指针命中统一用 `clientX/clientY - getBoundingClientRect()`，横竖屏切换后不会出现椭圆变形或触控偏移。
+  - 桌面样式在 `panels.css`；移动竖屏样式在 `responsive.css`；移动横屏专属样式在 `mobile_landscape.css` 且只在 `html.ml-active #memory-node-panel` 下生效。
+
+- 测试方法
+  1. 未配置 API Key 时，书桌 `1` 可打开记忆节点，搜索、删除、设置可用，且不会发起额外请求。
+  2. 与芙提雅、约会、暖调闲聚访客、圆桌分别对话后，刷新页面再打开记忆节点，应能看到对应图谱节点和关系。
+  3. 访客 A 私聊产生的记忆不应被访客 B 检索；圆桌公共记忆可被所有 bot 检索。
+  4. 搜索某实体后删除关系，应同步删除对应长期记忆内容；导出再导入后不复活。
+  4a. 打开“记忆档案”，默认应列出未入图谱的原文记忆；删除某条 memory 后，列表、图谱、搜索结果和 `deletedIds` 同步更新，导出再导入后不复活。
+  5. 开启原系统设置知识库后，对话请求同时包含原知识库参考和长期记忆参考，但两个管理界面互不混入。
+  6. 输入“我喜欢草莓蛋糕，明天想去天台看星星”应生成“草莓蛋糕 / 天台 / 星星”等事实节点；40 句以上普通对话反复提到“老师可爱 / 小老师 / 约会地点 / 草莓蛋糕”时，应只晋升少量 `常聊到` / `共同聊到` 派生关系，不应把每句闲聊分词都画成节点；不应生成“哪约会 / 什么吗 / 我看可以 / 那就走吧 / 我看 / 天去 / 那就 / 们去”等碎片节点。
+  7. 玩家问“你喜欢我吗？”，bot 回复“喜欢啊，喜欢得要命的那种”时，只应生成 `bot -> 喜欢 -> 分析员`，不能生成 `bot -> 喜欢 -> 得要命的那种`；若 bot 回复“才没有喜欢呢”，应生成 `bot -> 不喜欢 -> 分析员`。
+  8. 桌面、移动竖屏、`?ml=1` 横屏下，`#memory-node-panel` 不应溢出；竖屏/横屏互切后节点应保持圆形，点击命中位置正确，关闭后应恢复控制模式。
