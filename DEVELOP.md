@@ -339,7 +339,7 @@ npm run dev
 
 - 桌面端使用 `A/D` 或方向键移动，`Escape` 返回房间。
 - 移动端显示左右触控按钮；小游戏打开时隐藏原 3D 触控摇杆，避免输入重叠。
-- `js/mobile_viewport_fix.js` 只处理触屏设备的通用 viewport 回切：横屏转竖屏时恢复竖屏真实宽度，竖屏转横屏时回到 `device-width`，避免页面整体缩小；`js/mobile_refresh.js` 只提供右下角“刷新”按钮与确认弹窗，桌面端不显示。
+- `js/mobile_viewport_fix.js` 只处理触屏设备的通用 viewport 回切：横屏转竖屏时恢复竖屏真实宽度，竖屏转横屏时回到 `device-width`，避免页面整体缩小。部分 Android WebView/Chrome 容器回到竖屏后会让 `window.innerWidth/100vw` 继续沿用横屏布局宽度，导致页面实际盒子变成约 2 倍；此时脚本用 `document.documentElement.clientWidth/clientHeight` 写入 `--mobile-portrait-layout-w/h` 并给 `<html>` 加 `mobile-portrait-viewport-fixed`，`css/mobile_common.css` 只在触屏竖屏下把 `body/#game-canvas/#hud/#touch-controls/#top-bar/#mobile-refresh-btn` 等通用层夹回可信竖屏盒子，横屏会移除该类，不参与 `ml-active` 横屏专用逻辑。`scene.js` 监听 `fritia-mobile-viewport-fixed`，只在该通用竖屏修复尺寸存在时用可信宽高重算 Three.js renderer；`js/mobile_refresh.js` 只提供右下角“刷新”按钮与确认弹窗，桌面端不显示。
 - 战术考核打开期间 `#side-scroller-adventure` 会带 `is-side-combat-active`；`js/side_scroller_combat.js#syncCombatViewportClass()` 会按实际宽高与宽高比计算 `--side-combat-ui-scale`，并在宽屏低高度时增加 `is-side-combat-compact-wide` / `is-side-combat-extreme-wide`。`css/responsive.css` 只在这些状态下线性缩小设定弹窗、HUD、手牌、侧边按钮、典藏牌库/规则/排行榜浮窗和卡池列表；极窄横屏会把芙提雅生命 HUD 改为顶部居中低高度血条，保留头像、隐藏状态图标，避免挡住敌方攻击意图。首次进入低高度宽屏时信息卡默认折叠，事件/结算弹窗居中显示，左右侧 UI 会保留安全边距。`side_scroller_adventure.js` 会同步降低角色地面线与角色比例。该适配不作用于其他横板或 3D 功能。
 - 移动端进入战术考核时若检测到竖屏视口，会显示 `#side-scroller-orientation-blocker` 顶层提醒，模糊并阻断底层控件，点击退出按钮关闭战术考核；旋转回横屏后自动隐藏提醒、重算 Canvas 尺寸并播放一次淡入淡出转场。该提醒仅作用于战术考核模式。
 - **移动端横屏专用 UI（独立系统，详见 `UI_MOBILE.md`）**：`js/mobile_landscape.js` 在「触屏设备 + 横屏」时给 `<html>` 挂 `ml-active`（矮屏加 `ml-short`、超宽加 `ml-ultrawide`），写入真实视口变量 `--ml-h/--ml-w/--ml-vh/--ml-vw`，派发 `ml-mode-changed` 事件，暴露只读 `window.FritiaMobileLandscape.isActive()`；`css/mobile_landscape.css`（最后 link）以 `html.ml-active` 前缀，按各悬浮窗口内容逐一压缩标题/底栏并重排控件。各浮层要点：圆桌密语群聊步把状态文字搬到标题副标题、时间条搬到左栏、输入压一行、取消底栏（DOM 搬移由 `mobile_landscape.js` 负责，退出还原）；调酒挑战左右双栏并收紧、隐藏材料类型标签、材料列表自绘滚动条；发起邀请去 PMX 预览框、候选卡缩矮 + 左栏自绘滚动条、隐藏「已选中」说明条；舞曲把底部说明移到顶部；系统设置知识库 FILES/CHUNKS 列表加自绘滚动条可下滚。**战术考核整体沿用 `responsive.css` 既有三层方案**（`max-height:540` 固定块 + `is-side-combat-compact-wide/extreme-wide`），本系统只精准接管两处：把手牌两侧 4 控件（牌库/刷新/弃牌/出牌数）从中心偏移改为锚定到手牌左右边缘（`--ml-hand-w`，竖向抬高错开角按钮、窄屏缩小兜底），并放大卡牌、缩小标题/描述但保留底部数值字号；**不碰 `side_scroller_*.js`**（早期改 Canvas 人物缩放已回退）。该系统与桌面端/竖屏完全解耦，删掉 `index.html` 两行引用即可一键还原。支持 `?ml=1/0` 或 `localStorage.fritia_force_ml` 强制开关（桌面对照测试）。
@@ -384,7 +384,7 @@ npm run dev
 - 卡牌稀有度本地按蓝 68%、紫 25%、金 7% 生成；数值、目标类型、持续回合和状态效果全部本地计算并 clamp。
 - `js/side_scroller_cards_llm.js` 复用 `settings.js#getSettings()` 的 `apiKey/baseUrl/model` 和 `src/_queries/system_prompt.txt`，调用 OpenAI 兼容 `chat/completions`，支持流式/非流式响应解析；请求不设置本地 `max_tokens` 硬上限，避免 10 张卡牌 JSON 被截断。
 - LLM 目标输出为 `{ cards: [{ slotId, category, name, description }] }`；解析器兼容模型误返回的直接数组，但 prompt 仍要求完整 object。locked 槽位不能改类别，flex 槽位类别优先由玩家自由战斗风格引导，文案需按 rarity 区分强度：蓝色正常、紫色更强、金色无与伦比地强，同时继续参考芙提雅知识库经历，并遵守 `effectScope` 的单体/群体描述；召唤牌隐藏流血不写进描述；非法 JSON、非法类别、过长文本或无 API 配置都会回退到本地卡牌文本。
-- 分析员技能：`神之守护` 每局 3 次，芙提雅回满血、获得 3 个玩家回合减伤、敌方下回合沉默；守护代价为芙提雅 2 回合内攻击牌伤害降低 20%，会直接反映在攻击类卡牌数值和结算中。`御驾亲征` 每局 3 次，非 Boss 直接击杀，Boss 生命高于 50% 时不可用。
+- 分析员技能：`神之守护` 每局 1 次，芙提雅回满血、获得 3 个玩家回合减伤、敌方下回合沉默；守护代价为芙提雅 2 回合内攻击牌伤害降低 20%，会直接反映在攻击类卡牌数值和结算中。`御驾亲征` 每局 2 次，非 Boss 直接击杀，Boss 生命高于 50% 时不可用。
 - `js/side_scroller_archive.js` 负责典藏牌库存储、导出、导入和卡牌规范化；不会调用 LLM，不新增后端，不执行代码字符串。
 - `js/side_scroller_scores.js` 负责战术考核分数 Top 10 存储、导出和导入；不会调用 LLM，不新增后端。
 - 战斗 UI 只存在于横板 overlay 内，关闭横板后除典藏牌库外的全部运行态丢弃，不影响日常对话、约会、造梦、调酒、圆桌密语和其他存档字段。
@@ -1487,6 +1487,9 @@ DOM ID：
 - `fritia-action`
   - 来源：移动端触控按钮。
   - detail：`{ code }`，例如 `KeyE`、`KeyF`。
+- `fritia-mobile-viewport-fixed`
+  - 来源：`js/mobile_viewport_fix.js` 在触屏竖屏下确认可信 `clientWidth/clientHeight` 后派发。
+  - detail：`{ width, height }`；用途是让 `scene.js` 使用可信竖屏尺寸重算 Three.js renderer。
 - `fritia-overlay-closed`
   - 来源：各 overlay 关闭。
   - detail：`{ id }`。
@@ -1651,7 +1654,7 @@ Escape：
 5. 背景山脉、雪地和近景地面随移动差速循环滚动，左右移动都没有明显断层。
 6. 只向右移动累计前进距离；触发战斗、补给、稀有信标或 Boss 时横板移动暂停。
 7. 战斗中点击或拖放卡牌到敌人/芙提雅可结算，攻击、治疗、控制、召唤、强化牌都有可见反馈；召唤牌会消耗每回合 3 次出牌次数，并能挂流血。
-8. `神之守护` 和 `御驾亲征` 各 3 次；`神之守护` 后攻击类卡牌数值在 2 回合内降低 20%，敌方伤害意图不因守护代价提高；Boss 生命高于 50% 时 `御驾亲征` 不应生效。
+8. `神之守护` 每局 1 次，`御驾亲征` 每局 2 次；`神之守护` 后攻击类卡牌数值在 2 回合内降低 20%，敌方伤害意图不因守护代价提高；Boss 生命高于 50% 时 `御驾亲征` 不应生效。
 9. 未开始界面右侧的“战术文档”按钮可打开规则简介，下面的分数看板按钮可查看历史最高 10 次得分；开始战斗后战术文档按钮移动到左侧典藏牌库上方，分数看板按钮隐藏；结算后点击返回起点回到“战术考核设定”时，战术文档按钮回到右侧初始位置；规则简介与典藏牌库弹窗互斥。
 10. 全局刷新次数初始为敌人事件数 + 2，点击刷新会使用预加载的 15 张卡池并消耗次数；本轮卡池总剩余数（前台手牌 + 隐藏余牌）降为 0 且仍有全局刷新次数时，才会自动消耗 1 次刷新并补满新卡池。
 11. 击杀敌方单位会立刻更新实时积分，补给不加分；路线结算页显示最终积分，新纪录显示黄色角标，并写入分数 Top 10。

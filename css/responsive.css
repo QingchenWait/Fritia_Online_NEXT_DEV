@@ -1842,6 +1842,198 @@
     .roundtable-participant-list { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 600px) and (orientation: portrait) {
+    #gift-terminal-panel .otome-panel__head,
+    #dream-terminal-panel .otome-panel__head {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        padding-bottom: 12px;
+    }
+
+    #gift-terminal-panel .otome-panel__titles,
+    #dream-terminal-panel .otome-panel__titles {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    #gift-terminal-panel .otome-panel__actions,
+    #dream-terminal-panel .otome-panel__actions {
+        box-sizing: border-box;
+        flex: 0 0 calc(100% - 56px);
+        order: 3;
+        width: calc(100% - 56px);
+        min-width: 0;
+        margin-left: 56px;
+        padding-right: 44px;
+        gap: 8px;
+    }
+
+    #gift-terminal-panel #gift-balance,
+    #dream-terminal-panel #dream-balance {
+        min-height: 28px;
+        max-width: 100%;
+        padding: 4px 12px;
+        font-size: 0.78rem;
+        line-height: 1.2;
+        white-space: normal;
+    }
+
+    :root {
+        --roundtable-portrait-chat-edge: 0px;
+        --roundtable-portrait-send-size: 44px;
+    }
+
+    .roundtable-head.otome-panel__head,
+    .roundtable-head {
+        gap: 8px;
+        padding-right: 54px;
+    }
+
+    .roundtable-head .otome-panel__titles {
+        min-width: 0;
+    }
+
+    .roundtable-head .otome-panel__title {
+        white-space: nowrap;
+        font-size: clamp(1.02rem, 6vw, 1.22rem);
+        line-height: 1.08;
+        letter-spacing: 0;
+    }
+
+    .roundtable-head .otome-panel__kicker {
+        max-width: 132px;
+        font-size: 0.62rem;
+    }
+
+    .roundtable-head .otome-panel__actions {
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+        gap: 7px;
+        min-width: 0;
+        width: auto;
+    }
+
+    .roundtable-head .otome-chip {
+        padding: 6px 9px;
+        font-size: 0.72rem;
+        white-space: nowrap;
+    }
+
+    #roundtable-whispers-panel .roundtable-chat-layout {
+        padding:
+            var(--roundtable-portrait-chat-edge)
+            max(var(--roundtable-portrait-chat-edge), env(safe-area-inset-right))
+            var(--roundtable-portrait-chat-edge)
+            max(var(--roundtable-portrait-chat-edge), env(safe-area-inset-left));
+        gap: 6px;
+    }
+
+    .roundtable-chat-main,
+    .roundtable-roster {
+        border-radius: var(--r-sm);
+    }
+
+    .roundtable-input-console {
+        grid-template-columns: minmax(0, 1fr) var(--roundtable-portrait-send-size);
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+    }
+
+    #roundtable-input {
+        min-height: 40px;
+        height: 40px;
+        max-height: 40px;
+        resize: none;
+        overflow-y: auto;
+        padding: 8px 12px;
+        line-height: 22px;
+    }
+
+    #roundtable-send {
+        width: var(--roundtable-portrait-send-size);
+        min-width: var(--roundtable-portrait-send-size);
+        height: var(--roundtable-portrait-send-size);
+        min-height: var(--roundtable-portrait-send-size);
+        align-self: center;
+        overflow: hidden;
+        padding: 0;
+        border-radius: 50%;
+        color: transparent;
+        font-size: 0;
+        background:
+            url("../src/_logos/icon_paper_plane.svg") center / 25px 25px no-repeat,
+            linear-gradient(180deg, #ef9fbc, #d86291);
+    }
+
+    .roundtable-roster.is-expanded {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .roundtable-roster.is-expanded .roundtable-participant-strip {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding: 0 8px 10px;
+        width: 100%;
+    }
+
+    .roundtable-roster.is-expanded .roundtable-strip-member {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        gap: 6px;
+        max-width: none;
+        min-width: 0;
+        padding: 7px 6px;
+        width: auto;
+    }
+
+    .roundtable-roster.is-expanded .roundtable-avatar--sm {
+        width: 28px;
+        height: 28px;
+    }
+
+    .roundtable-roster.is-expanded .roundtable-strip-member span:last-child {
+        min-width: 0;
+        font-size: 0.78rem;
+    }
+}
+
+@media (max-width: 420px) and (orientation: portrait) {
+    .roundtable-head .otome-panel__icon {
+        width: 38px;
+        height: 38px;
+    }
+
+    .roundtable-head .otome-panel__icon img {
+        width: 23px;
+        height: 23px;
+    }
+
+    .roundtable-head .otome-panel__title {
+        font-size: clamp(0.92rem, 5.2vw, 1.06rem);
+    }
+
+    .roundtable-head .otome-panel__kicker {
+        max-width: 118px;
+        font-size: 0.56rem;
+    }
+
+    .roundtable-head .otome-panel__actions {
+        gap: 5px;
+    }
+
+    .roundtable-head .otome-chip {
+        min-height: 30px;
+        padding-inline: 7px;
+        font-size: 0.68rem;
+    }
+}
+
 @media (max-width: 420px) {
     #bartending-challenge-panel.ui-overlay { padding: 8px; }
     .bartending-shell .otome-panel__head {

@@ -653,6 +653,14 @@ html.ml-active #side-scroller-adventure.is-side-combat-active .side-scroller-tit
     display: none;
 }
 
+html.ml-active #side-scroller-adventure.is-side-combat-active .side-scroller-topbar {
+    justify-content: flex-end;
+}
+
+html.ml-active #side-scroller-adventure.is-side-combat-active .side-scroller-close {
+    margin-left: auto;
+}
+
 /* ---- 手牌：本系统接管宽度，便于精确把控件贴到卡牌两侧 ---- */
 html.ml-active #side-scroller-adventure .side-combat-hand {
     width: var(--ml-hand-w);

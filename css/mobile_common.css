@@ -13,6 +13,47 @@
 }
 
 @media (pointer: coarse) {
+    html.mobile-portrait-viewport-fixed,
+    html.mobile-portrait-viewport-fixed body {
+        width: var(--mobile-portrait-layout-w) !important;
+        min-width: var(--mobile-portrait-layout-w) !important;
+        max-width: var(--mobile-portrait-layout-w) !important;
+        height: var(--mobile-portrait-layout-h) !important;
+        min-height: var(--mobile-portrait-layout-h) !important;
+        max-height: var(--mobile-portrait-layout-h) !important;
+        overflow: hidden !important;
+    }
+
+    html.mobile-portrait-viewport-fixed body {
+        position: fixed;
+        inset: 0 auto auto 0;
+    }
+
+    html.mobile-portrait-viewport-fixed #game-canvas,
+    html.mobile-portrait-viewport-fixed #hud,
+    html.mobile-portrait-viewport-fixed #touch-controls,
+    html.mobile-portrait-viewport-fixed #fade-overlay,
+    html.mobile-portrait-viewport-fixed #loading-screen,
+    html.mobile-portrait-viewport-fixed #click-to-play,
+    html.mobile-portrait-viewport-fixed #dream-object-controls,
+    html.mobile-portrait-viewport-fixed .mobile-refresh-confirm {
+        width: var(--mobile-portrait-layout-w) !important;
+        height: var(--mobile-portrait-layout-h) !important;
+        right: auto !important;
+        bottom: auto !important;
+    }
+
+    html.mobile-portrait-viewport-fixed #touch-controls {
+        top: 0 !important;
+        left: 0 !important;
+    }
+
+    html.mobile-portrait-viewport-fixed #top-bar {
+        right: auto !important;
+        left: calc(var(--mobile-portrait-layout-w) - 16px) !important;
+        transform: translateX(-100%);
+    }
+
     #mobile-refresh-btn {
         position: fixed;
         right: max(20px, env(safe-area-inset-right));
@@ -20,10 +61,27 @@
         z-index: 21;
         display: flex;
         pointer-events: auto;
+        font-size: 0;
+        letter-spacing: 0;
     }
 
-    #touch-controls.active ~ #mobile-refresh-btn {
-        bottom: calc(max(20px, env(safe-area-inset-bottom)) + 84px);
+    #mobile-refresh-btn::before {
+        content: "";
+        width: 30px;
+        height: 30px;
+        background: rgba(255, 255, 255, 0.82);
+        -webkit-mask: url("../src/_logos/dream_reset.svg") center / contain no-repeat;
+        mask: url("../src/_logos/dream_reset.svg") center / contain no-repeat;
+    }
+
+    html.mobile-portrait-viewport-fixed #mobile-refresh-btn {
+        right: auto;
+        left: calc(var(--mobile-portrait-layout-w) - max(20px, env(safe-area-inset-right)));
+        transform: translateX(-100%);
+    }
+
+    html.mobile-portrait-viewport-fixed .mobile-refresh-confirm__panel {
+        width: min(320px, calc(var(--mobile-portrait-layout-w) - 40px));
     }
 
     body.side-scroller-active #mobile-refresh-btn,

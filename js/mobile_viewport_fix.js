@@ -1,6 +1,7 @@
 (function () {
     'use strict';
 
+    var ROOT = document.documentElement;
     var DEFAULT_CONTENT = 'width=device-width, initial-scale=1.0, viewport-fit=cover';
     var REPAIR_STEPS = [0, 60, 140, 260, 420];
     var lastOrientation = getOrientation();
@@ -22,9 +23,30 @@
 
     function getViewportSize() {
         var vv = window.visualViewport;
-        var width = Number(vv && vv.width) || window.innerWidth || document.documentElement.clientWidth || 0;
-        var height = Number(vv && vv.height) || window.innerHeight || document.documentElement.clientHeight || 0;
+        var width = Number(vv && vv.width) || window.innerWidth || ROOT.clientWidth || 0;
+        var height = Number(vv && vv.height) || window.innerHeight || ROOT.clientHeight || 0;
         return { width: width, height: height };
+    }
+
+    function getTrustedClientSize() {
+        var width = Number(ROOT.clientWidth) || window.innerWidth || 0;
+        var height = Number(ROOT.clientHeight) || window.innerHeight || 0;
+        return {
+            width: Math.round(width),
+            height: Math.round(height)
+        };
+    }
+
+    function validPortraitWidth(value) {
+        return isFinite(value) && value >= 240 && value <= 820;
+    }
+
+    function rememberPortraitWidthValue(value) {
+        value = Math.round(Number(value) || 0);
+        if (!validPortraitWidth(value)) return;
+        if (!rememberedPortraitWidth || value < rememberedPortraitWidth) {
+            rememberedPortraitWidth = value;
+        }
     }
 
     function getViewportMeta() {
@@ -42,7 +64,7 @@
 
     function getPortraitDeviceWidth() {
         var preferred = Number(rememberedPortraitWidth);
-        if (isFinite(preferred) && preferred >= 240 && preferred <= 820) {
+        if (validPortraitWidth(preferred)) {
             return String(Math.round(preferred));
         }
         var values = [
@@ -50,19 +72,7 @@
             Number(window.screen && window.screen.height),
             Number(window.screen && window.screen.availWidth),
             Number(window.screen && window.screen.availHeight)
-        ].filter(function (value) {
-            return isFinite(value) && value >= 240 && value <= 820;
-        });
-        if (!values.length) {
-            values = [
-                Number(window.screen && window.screen.width),
-                Number(window.screen && window.screen.height),
-                Number(window.screen && window.screen.availWidth),
-                Number(window.screen && window.screen.availHeight)
-            ].filter(function (value) {
-                return isFinite(value) && value >= 240 && value <= 1400;
-            });
-        }
+        ].filter(validPortraitWidth);
         if (!values.length) return 'device-width';
         return String(Math.round(Math.min.apply(Math, values)));
     }
@@ -73,34 +83,53 @@
     }
 
     function forceViewportReflow() {
-        var root = document.documentElement;
         var body = document.body;
-        if (!root || !body) return;
-        root.style.minWidth = '0';
+        if (!ROOT || !body) return;
+        ROOT.style.minWidth = '0';
         body.style.minWidth = '0';
-        void root.offsetWidth;
-        root.style.removeProperty('min-width');
+        void ROOT.offsetWidth;
+        ROOT.style.removeProperty('min-width');
         body.style.removeProperty('min-width');
+    }
+
+    function applyPortraitLayoutFix(orientation) {
+        if (!isTouchDevice() || orientation !== 'portrait') {
+            ROOT.classList.remove('mobile-portrait-viewport-fixed');
+            ROOT.style.removeProperty('--mobile-portrait-layout-w');
+            ROOT.style.removeProperty('--mobile-portrait-layout-h');
+            try { delete window.FritiaMobileViewportSize; } catch { window.FritiaMobileViewportSize = null; }
+            return;
+        }
+        var size = getTrustedClientSize();
+        if (!validPortraitWidth(size.width) || !isFinite(size.height) || size.height < size.width) return;
+        ROOT.style.setProperty('--mobile-portrait-layout-w', size.width + 'px');
+        ROOT.style.setProperty('--mobile-portrait-layout-h', size.height + 'px');
+        ROOT.classList.add('mobile-portrait-viewport-fixed');
+        window.FritiaMobileViewportSize = { width: size.width, height: size.height };
+        try {
+            window.dispatchEvent(new CustomEvent('fritia-mobile-viewport-fixed', { detail: window.FritiaMobileViewportSize }));
+        } catch {
+            window.dispatchEvent(new Event('fritia-mobile-viewport-fixed'));
+        }
     }
 
     function applyViewportForCurrentOrientation() {
         if (!isTouchDevice()) {
             normalizeViewportMeta(DEFAULT_CONTENT);
+            applyPortraitLayoutFix('desktop');
             return;
         }
         var orientation = getOrientation();
         if (orientation === 'portrait') rememberPortraitWidth();
         normalizeViewportMeta(getViewportContentForOrientation(orientation));
+        applyPortraitLayoutFix(orientation);
         forceViewportReflow();
     }
 
     function rememberPortraitWidth() {
         var size = getViewportSize();
         if (size.height < size.width) return;
-        if (size.width < 240 || size.width > 820) return;
-        if (!rememberedPortraitWidth || size.width < rememberedPortraitWidth) {
-            rememberedPortraitWidth = size.width;
-        }
+        rememberPortraitWidthValue(size.width);
     }
 
     function schedulePortraitRepair() {

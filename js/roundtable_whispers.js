@@ -1495,7 +1495,7 @@ function startChat(mode = 'fresh') {
     state.lastPlayerMessageAt = state.lastPlayerMessageAt || nowMs();
     const members = getParticipantSnapshot(state.activeParticipantIds);
     const names = members.map(item => item.name).join('、') || '圆桌成员';
-    appendSystemMessage(`[分析员, ${names}] 开始群聊`, `session-start-${state.currentSessionId}`, {
+    appendSystemMessage(`[分析员与${names}] 开始群聊`, `session-start-${state.currentSessionId}`, {
         sessionId: state.currentSessionId,
         sessionMode: mode === 'fresh' ? 'fresh' : 'full',
         eventType: 'session-start',
