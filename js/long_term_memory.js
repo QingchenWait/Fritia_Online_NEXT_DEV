@@ -1,3 +1,5 @@
+import { getLongTermMemoryAdvancedSettings } from './advanced_settings.js';
+
 const STORAGE_KEY = 'fritia_long_term_memory';
 
 const DEFAULT_SETTINGS = {
@@ -23,6 +25,14 @@ const MENTION_PROMOTION_MIN_EVIDENCE = 2;
 const TOPIC_PROMOTION_MIN_MEMORIES = 3;
 const MAX_PROMOTED_TOPICS_PER_SCOPE = 18;
 const MAX_KEYWORDS_PER_MEMORY = 8;
+const MAINTENANCE_REASON = Object.freeze({
+    LOAD: 'load',
+    SAVE: 'save',
+    IMPORT: 'import',
+    PANEL: 'panel'
+});
+const DAY_MINUTES = 24 * 60;
+const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 const PERSON_NODE_IDS = new Set([
     'person:player',
@@ -163,7 +173,8 @@ function createEmptyStore() {
         settings: { ...DEFAULT_SETTINGS },
         memories: [],
         edges: [],
-        deletedIds: []
+        deletedIds: [],
+        lifecycle: createLifecycleState()
     };
 }
 
@@ -181,16 +192,24 @@ function loadRawStore() {
                 console.warn('[LongTermMemory] migration save failed:', err);
             }
         }
-        return normalized;
+        const maintained = maybeRunLifecycleMaintenance(normalized, MAINTENANCE_REASON.LOAD);
+        if ((maintained.lifecycle?.lastMaintenanceAt || 0) !== (normalized.lifecycle?.lastMaintenanceAt || 0)) {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(maintained));
+            } catch (err) {
+                console.warn('[LongTermMemory] maintenance save failed:', err);
+            }
+        }
+        return maintained;
     } catch (err) {
         console.warn('[LongTermMemory] load failed:', err);
         return createEmptyStore();
     }
 }
 
-function saveStore(store) {
+function saveStore(store, options = {}) {
     const prepared = rebuildDerivedGraphEdges({ ...store, updatedAt: nowMs() });
-    const normalized = normalizeStore(prepared);
+    const normalized = maybeRunLifecycleMaintenance(normalizeStore(prepared), options.maintenanceReason || MAINTENANCE_REASON.SAVE, { force: Boolean(options.forceMaintenance) });
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
         document.dispatchEvent(new CustomEvent('fritia-long-term-memory-updated', {
@@ -226,9 +245,76 @@ function normalizeStore(raw = {}) {
         settings: normalizeSettings(raw.settings || DEFAULT_SETTINGS),
         memories,
         edges,
-        deletedIds: [...deletedSet].slice(-MAX_DELETED_IDS)
+        deletedIds: [...deletedSet].slice(-MAX_DELETED_IDS),
+        lifecycle: normalizeLifecycleState(raw.lifecycle)
     };
     return pruneStore(clean);
+}
+
+function createLifecycleState() {
+    return {
+        lastMaintenanceAt: 0,
+        lastMaintenanceReason: '',
+        maintenanceRuns: 0,
+        lastStats: {
+            beforeMemories: 0,
+            afterMemories: 0,
+            beforeEdges: 0,
+            afterEdges: 0,
+            prunedMemories: 0,
+            prunedEdges: 0
+        }
+    };
+}
+
+function normalizeLifecycleState(raw = {}) {
+    const stats = raw && typeof raw.lastStats === 'object' ? raw.lastStats : {};
+    return {
+        lastMaintenanceAt: Number(raw?.lastMaintenanceAt) || 0,
+        lastMaintenanceReason: clampString(raw?.lastMaintenanceReason || '', 24),
+        maintenanceRuns: Math.max(0, Math.round(Number(raw?.maintenanceRuns) || 0)),
+        lastStats: {
+            beforeMemories: Math.max(0, Math.round(Number(stats.beforeMemories) || 0)),
+            afterMemories: Math.max(0, Math.round(Number(stats.afterMemories) || 0)),
+            beforeEdges: Math.max(0, Math.round(Number(stats.beforeEdges) || 0)),
+            afterEdges: Math.max(0, Math.round(Number(stats.afterEdges) || 0)),
+            prunedMemories: Math.max(0, Math.round(Number(stats.prunedMemories) || 0)),
+            prunedEdges: Math.max(0, Math.round(Number(stats.prunedEdges) || 0))
+        }
+    };
+}
+
+function maybeRunLifecycleMaintenance(store, reason = MAINTENANCE_REASON.SAVE, options = {}) {
+    const advanced = getLongTermMemoryAdvancedSettings();
+    const lifecycle = normalizeLifecycleState(store.lifecycle);
+    const intervalMs = Math.max(1, Number(advanced.maintenanceIntervalHours) || 24) * 3600000;
+    const due = options.force || !lifecycle.lastMaintenanceAt || nowMs() - lifecycle.lastMaintenanceAt >= intervalMs;
+    if (!due) return { ...store, lifecycle };
+    return runLifecycleMaintenance({ ...store, lifecycle }, reason);
+}
+
+function runLifecycleMaintenance(store, reason = MAINTENANCE_REASON.SAVE) {
+    const beforeMemories = (store.memories || []).length;
+    const beforeEdges = (store.edges || []).length;
+    const maintained = pruneStore({
+        ...store,
+        lifecycle: normalizeLifecycleState(store.lifecycle)
+    });
+    maintained.lifecycle = {
+        ...normalizeLifecycleState(maintained.lifecycle),
+        lastMaintenanceAt: nowMs(),
+        lastMaintenanceReason: clampString(reason, 24),
+        maintenanceRuns: (normalizeLifecycleState(maintained.lifecycle).maintenanceRuns || 0) + 1,
+        lastStats: {
+            beforeMemories,
+            afterMemories: (maintained.memories || []).length,
+            beforeEdges,
+            afterEdges: (maintained.edges || []).length,
+            prunedMemories: Math.max(0, beforeMemories - (maintained.memories || []).length),
+            prunedEdges: Math.max(0, beforeEdges - (maintained.edges || []).length)
+        }
+    };
+    return maintained;
 }
 
 function normalizeMemory(raw) {
@@ -260,6 +346,10 @@ function normalizeMemory(raw) {
         createdAt,
         updatedAt: Number(raw.updatedAt) || createdAt,
         lastReferencedAt: Number(raw.lastReferencedAt) || 0,
+        lastAccessedAt: Number(raw.lastAccessedAt) || Number(raw.lastReferencedAt) || 0,
+        lastReinforcedAt: Number(raw.lastReinforcedAt) || 0,
+        accessCount: Math.max(0, Math.round(Number(raw.accessCount) || 0)),
+        reinforcementCount: Math.max(0, Math.round(Number(raw.reinforcementCount) || 0)),
         gameMinutes: Number(raw.gameMinutes) || 0,
         gameDateTime: clampString(raw.gameDateTime, 40),
         importance: clampNumber(raw.importance, 0, 10, 3),
@@ -531,7 +621,7 @@ export function importLongTermMemory(data = {}) {
         memories: [...currentMemories.values()],
         edges: [...currentEdges.values()],
         deletedIds: [...deleted]
-    });
+    }, { maintenanceReason: MAINTENANCE_REASON.IMPORT, forceMaintenance: true });
     refreshMemoryPanelIfOpen(saved);
     return { imported, edges: edgeImported, skipped };
 }
@@ -543,6 +633,10 @@ function mergeMemory(a, b) {
         createdAt: Math.min(a.createdAt || nowMs(), b.createdAt || nowMs()),
         updatedAt: Math.max(a.updatedAt || 0, b.updatedAt || 0),
         lastReferencedAt: Math.max(a.lastReferencedAt || 0, b.lastReferencedAt || 0),
+        lastAccessedAt: Math.max(a.lastAccessedAt || 0, b.lastAccessedAt || 0),
+        lastReinforcedAt: Math.max(a.lastReinforcedAt || 0, b.lastReinforcedAt || 0),
+        accessCount: Math.max(Number(a.accessCount) || 0, Number(b.accessCount) || 0),
+        reinforcementCount: Math.max(Number(a.reinforcementCount) || 0, Number(b.reinforcementCount) || 0),
         tags: [...new Set([...(a.tags || []), ...(b.tags || [])])].slice(0, 12),
         sourceMessageIds: [...new Set([...(a.sourceMessageIds || []), ...(b.sourceMessageIds || [])])].slice(0, 30),
         importance: Math.max(a.importance || 0, b.importance || 0),
@@ -561,6 +655,70 @@ function mergeEdge(a, b) {
         updatedAt: Math.max(a.updatedAt || 0, b.updatedAt || 0),
         sourceMemoryIds,
         weight: Math.min(20, Math.max(a.weight || 1, b.weight || 1) + repetitionBoost)
+    };
+}
+
+function findSimilarMemory(memory, memories = [], advanced = getLongTermMemoryAdvancedSettings()) {
+    if (!memory?.text) return null;
+    const threshold = Number(advanced.duplicateSimilarityThreshold) || 0.62;
+    const sourceTokens = memorySimilarityTokens(memory);
+    if (sourceTokens.size < 2) return null;
+    const candidates = memories
+        .filter(item => item && item.id !== memory.id)
+        .filter(item => item.scope === memory.scope && item.type === memory.type)
+        .filter(item => normalizeSpeakerRole(item.speakerRole) === normalizeSpeakerRole(memory.speakerRole))
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .slice(0, Number(advanced.duplicateCandidateLimit) || 80);
+    let best = null;
+    for (const candidate of candidates) {
+        const candidateTokens = memorySimilarityTokens(candidate);
+        const score = jaccardSimilarity(sourceTokens, candidateTokens);
+        if (score < threshold) continue;
+        if (!best || score > best.score || (candidate.importance || 0) > (best.memory.importance || 0)) {
+            best = { memory: candidate, score };
+        }
+    }
+    return best;
+}
+
+function memorySimilarityTokens(memory = {}) {
+    const parts = [
+        stripMemoryPrefix(memory.text || ''),
+        ...(Array.isArray(memory.tags) ? memory.tags : [])
+    ];
+    return new Set(tokenize(parts.join(' ')).filter(token => token.length > 1 && !WEAK_WORDS.has(token)));
+}
+
+function jaccardSimilarity(a, b) {
+    if (!a?.size || !b?.size) return 0;
+    let intersection = 0;
+    for (const token of a) {
+        if (b.has(token)) intersection += 1;
+    }
+    return intersection / Math.max(1, a.size + b.size - intersection);
+}
+
+function reinforceDuplicateMemory(existing, incoming, advanced = getLongTermMemoryAdvancedSettings()) {
+    const now = nowMs();
+    const boost = Number(advanced.duplicateImportanceBoost) || 0;
+    const merged = mergeMemory(existing, {
+        ...incoming,
+        id: existing.id,
+        createdAt: existing.createdAt || incoming.createdAt,
+        updatedAt: now,
+        lastReinforcedAt: now,
+        reinforcementCount: (Number(existing.reinforcementCount) || 0) + 1,
+        importance: Math.min(10, (Number(existing.importance) || 0) + boost),
+        sourceMessageIds: [...new Set([...(existing.sourceMessageIds || []), ...(incoming.sourceMessageIds || [])])],
+        tags: [...new Set([...(existing.tags || []), ...(incoming.tags || [])])]
+    });
+    return {
+        ...merged,
+        text: existing.text,
+        updatedAt: now,
+        lastReinforcedAt: now,
+        reinforcementCount: (Number(existing.reinforcementCount) || 0) + 1,
+        importance: Number(Math.min(10, Math.max(existing.importance || 0, incoming.importance || 0) + boost).toFixed(2))
     };
 }
 
@@ -667,7 +825,9 @@ export function searchLongTermMemory(options = {}) {
         .map(entry => entry.item);
 
     if (scoredMemories.length || scoredEdges.length) {
-        touchReferencedItems(scoredMemories.map(item => item.id));
+        const sourceIds = [];
+        for (const edge of scoredEdges) sourceIds.push(...(edge.sourceMemoryIds || []));
+        touchReferencedItems([...scoredMemories.map(item => item.id), ...sourceIds]);
     }
     return { memories: scoredMemories, edges: scoredEdges };
 }
@@ -686,12 +846,21 @@ function expandQueryWithCharacterAliases(query = '') {
 
 function touchReferencedItems(memoryIds = []) {
     if (memoryIds.length === 0) return;
+    const advanced = getLongTermMemoryAdvancedSettings();
     const store = loadRawStore();
     const set = new Set(memoryIds);
     let changed = false;
     for (const memory of store.memories) {
         if (!set.has(memory.id)) continue;
-        memory.lastReferencedAt = nowMs();
+        const now = nowMs();
+        memory.lastReferencedAt = now;
+        memory.lastAccessedAt = now;
+        memory.accessCount = Math.max(0, Math.round(Number(memory.accessCount) || 0)) + 1;
+        if (advanced.accessReinforcementEnabled) {
+            const current = clampNumber(memory.importance, 0, 10, 3);
+            const cap = clampNumber(advanced.accessMaxImportance, 1, 10, 8);
+            memory.importance = Math.min(cap, Number((current + Number(advanced.accessImportanceBoost || 0)).toFixed(2)));
+        }
         changed = true;
     }
     if (changed) saveStore(store);
@@ -791,19 +960,33 @@ export function recordLongTermMemoryTurn(options = {}) {
 
     const memoryMap = new Map(store.memories.map(item => [item.id, item]));
     const edgeMap = new Map(store.edges.map(item => [item.id, item]));
+    const advanced = getLongTermMemoryAdvancedSettings();
     let added = 0;
     let edgeAdded = 0;
+    let reinforced = 0;
 
     for (const candidate of memoryCandidates) {
         if (store.deletedIds.includes(candidate.id)) continue;
         const { edges: candidateEdges = [], ...memoryRecord } = candidate;
-        const existing = memoryMap.get(memoryRecord.id);
-        memoryMap.set(memoryRecord.id, existing ? mergeMemory(existing, memoryRecord) : memoryRecord);
-        if (!existing) added += 1;
+        const duplicate = advanced.duplicateReinforcementEnabled
+            ? findSimilarMemory(memoryRecord, [...memoryMap.values()], advanced)
+            : null;
+        const targetMemory = duplicate?.memory || memoryRecord;
+        if (duplicate?.memory && duplicate.memory.id !== memoryRecord.id) {
+            memoryMap.set(duplicate.memory.id, reinforceDuplicateMemory(duplicate.memory, memoryRecord, advanced));
+            reinforced += 1;
+        } else {
+            const existing = memoryMap.get(memoryRecord.id);
+            memoryMap.set(memoryRecord.id, existing ? mergeMemory(existing, memoryRecord) : memoryRecord);
+            if (!existing) added += 1;
+        }
         for (const edge of candidateEdges) {
             if (store.deletedIds.includes(edge.id)) continue;
             const existingEdge = edgeMap.get(edge.id);
-            edge.sourceMemoryIds = [...new Set([...(edge.sourceMemoryIds || []), memoryRecord.id])];
+            if (duplicate?.memory && existingEdge) {
+                edge.weight = Math.min(20, Math.max(existingEdge.weight || 1, edge.weight || 1) + 1);
+            }
+            edge.sourceMemoryIds = [...new Set([...(edge.sourceMemoryIds || []), targetMemory.id])];
             edgeMap.set(edge.id, existingEdge ? mergeEdge(existingEdge, edge) : edge);
             if (!existingEdge) edgeAdded += 1;
         }
@@ -815,7 +998,7 @@ export function recordLongTermMemoryTurn(options = {}) {
         edges: [...edgeMap.values()]
     });
     refreshMemoryPanelIfOpen(saved);
-    return { added, edges: edgeAdded, skipped: false };
+    return { added, edges: edgeAdded, reinforced, skipped: false };
 }
 
 function extractMemoryCandidates(context) {
@@ -905,6 +1088,10 @@ function createMemoryCandidate(context) {
         createdAt: context.now,
         updatedAt: context.now,
         lastReferencedAt: 0,
+        lastAccessedAt: 0,
+        lastReinforcedAt: 0,
+        accessCount: 0,
+        reinforcementCount: 0,
         gameMinutes: Number(context.gameMinutes) || 0,
         gameDateTime: clampString(context.gameDateTime, 40),
         importance: clampNumber(context.importance, 0, 10, 3),
@@ -1224,19 +1411,19 @@ function appendInteractionEventEdges(edges, source, context = {}) {
             for (const object of objects) {
                 const clean = normalizeEntity(object);
                 if (!clean || edges.length >= 12) continue;
-                const eventLabel = createInteractionEventLabel(speakerName, targetName, template, clean, source);
+                const eventLabel = createInteractionEventLabel(speakerName, targetName, template, clean, source, context);
                 edges.push(createEdgeRecord(context.scope, speakerName, template.actorRelation, eventLabel, { ...context, weight: 6.2 }));
                 edges.push(createEdgeRecord(context.scope, targetName, template.targetRelation, eventLabel, { ...context, weight: 6 }));
                 edges.push(createEdgeRecord(context.scope, eventLabel, template.objectRelation, clean, { ...context, weight: 5.8 }));
-                const time = extractRelativeTimeLabel(source);
+                const time = extractMemoryTimeLabel(source, context);
                 if (time) edges.push(createEdgeRecord(context.scope, eventLabel, '时间', time, { ...context, weight: 4.8 }));
             }
         }
     }
 }
 
-function createInteractionEventLabel(actorName, targetName, template = {}, object = '', source = '') {
-    const time = extractRelativeTimeLabel(source);
+function createInteractionEventLabel(actorName, targetName, template = {}, object = '', source = '', context = {}) {
+    const time = extractMemoryTimeLabel(source, context);
     const action = template.actionLabel || template.actorRelation || '互动';
     const objectPart = template.includeObjectInEvent === false ? '' : object;
     return normalizeEventNodeLabel(`事件:${time || ''}${actorName}${action}${targetName}${objectPart}`);
@@ -1250,9 +1437,107 @@ function normalizeEventNodeLabel(value) {
 }
 
 function extractRelativeTimeLabel(source = '') {
+    return extractRelativeTimeInfo(source)?.label || '';
+}
+
+function extractMemoryTimeLabel(source = '', context = {}) {
+    const timeInfo = extractRelativeTimeInfo(source);
+    if (!timeInfo) return '';
+    return resolveRelativeGameDateLabel(timeInfo, context) || timeInfo.label || '';
+}
+
+function extractRelativeTimeInfo(source = '') {
     const text = String(source || '');
-    const match = text.match(/前天|昨天|今天|刚才|上次|早上|上午|中午|下午|晚上|今晚|明天|后天/);
-    return match ? match[0] : '';
+    if (!text) return null;
+    const markers = [
+        { label: '前天', dayOffset: -2 },
+        { label: '昨天', dayOffset: -1 },
+        { label: '今天', dayOffset: 0 },
+        { label: '明天', dayOffset: 1 },
+        { label: '后天', dayOffset: 2 },
+        { label: '今晚', dayOffset: 0, dayPart: '晚上' },
+        { label: '刚才', dayOffset: 0, dayPart: '刚才' },
+        { label: '上次', ambiguous: true }
+    ];
+    let marker = null;
+    for (const item of markers) {
+        const index = text.indexOf(item.label);
+        if (index < 0) continue;
+        if (!marker || index < marker.index) {
+            marker = { ...item, index };
+        }
+    }
+    const dayPart = findRelativeDayPart(text);
+    if (!marker && !dayPart) return null;
+    if (!marker && dayPart) {
+        marker = { label: dayPart.label, dayOffset: 0, index: dayPart.index };
+    }
+    return {
+        label: marker.label,
+        dayOffset: Number(marker.dayOffset || 0),
+        dayPart: marker.dayPart || (dayPart && dayPart.label !== marker.label ? dayPart.label : ''),
+        ambiguous: Boolean(marker.ambiguous)
+    };
+}
+
+function findRelativeDayPart(text) {
+    const parts = ['早上', '上午', '中午', '下午', '晚上'];
+    let match = null;
+    for (const label of parts) {
+        const index = text.indexOf(label);
+        if (index < 0) continue;
+        if (!match || index < match.index) {
+            match = { label, index };
+        }
+    }
+    return match;
+}
+
+function resolveRelativeGameDateLabel(timeInfo, context = {}) {
+    const info = typeof timeInfo === 'string' ? extractRelativeTimeInfo(timeInfo) : timeInfo;
+    if (!info) return '';
+    if (info.ambiguous) return info.label || '';
+    const gameMinutes = getCurrentGameMinutesForMemory(context);
+    if (!Number.isFinite(gameMinutes)) return info.label || '';
+    const calendar = getMemoryCalendarFromMinutes(gameMinutes, info.dayOffset);
+    const dateLabel = formatMemoryGameDate(calendar);
+    return info.dayPart ? `${dateLabel} ${info.dayPart}` : dateLabel;
+}
+
+function getCurrentGameMinutesForMemory(context = {}) {
+    const directMinutes = Number(context.gameMinutes ?? context.gameTime?.totalMinutes ?? context.gameTime?.gameMinutes);
+    if (Number.isFinite(directMinutes)) return Math.max(0, directMinutes);
+    try {
+        const raw = globalThis.localStorage?.getItem?.('fritia_game_state');
+        if (!raw) return NaN;
+        const state = JSON.parse(raw);
+        const storedMinutes = Number(state?.gameMinutes ?? state?.gameTime?.totalMinutes);
+        return Number.isFinite(storedMinutes) ? Math.max(0, storedMinutes) : NaN;
+    } catch {
+        return NaN;
+    }
+}
+
+function getMemoryCalendarFromMinutes(totalMinutes, dayOffset = 0) {
+    const rounded = Math.floor(Math.max(0, Number(totalMinutes) || 0));
+    const baseDayIndex = Math.floor(rounded / DAY_MINUTES);
+    const dayIndex = Math.max(0, baseDayIndex + Math.trunc(Number(dayOffset) || 0));
+    const year = Math.floor(dayIndex / 365) + 1;
+    let dayOfYear = dayIndex % 365;
+    let month = 1;
+    for (const days of MONTH_DAYS) {
+        if (dayOfYear < days) break;
+        dayOfYear -= days;
+        month++;
+    }
+    return { year, month, day: dayOfYear + 1, dayIndex };
+}
+
+function formatMemoryGameDate(info = {}) {
+    const year = Math.max(1, Math.round(Number(info.year) || 1));
+    const month = Math.max(1, Math.min(12, Math.round(Number(info.month) || 1)));
+    const day = Math.max(1, Math.round(Number(info.day) || 1));
+    return `第${year}年${month}月${day}日`;
 }
 
 function appendAddresseeActionRelationEdges(edges, source, context = {}) {
@@ -2191,7 +2476,8 @@ export function openMemoryNodePanel() {
     ui.panel.classList.remove('hidden');
     graphState.controlsModule?.releaseControlMode?.({ resumeOnClose: true });
     syncSettingsToUi();
-    refreshGraph();
+    const maintained = saveStore(loadRawStore(), { maintenanceReason: MAINTENANCE_REASON.PANEL });
+    refreshGraph(maintained);
     requestAnimationFrame(() => syncCanvasMetrics(true));
     startGraphAnimation();
     return true;

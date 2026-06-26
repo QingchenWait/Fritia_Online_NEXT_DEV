@@ -897,6 +897,76 @@
                                 </div>
                             </div>
                         </section>
+
+                        <section class="advanced-settings-group">
+                            <h3>长期记忆</h3>
+                            <div class="advanced-setting-row">
+                                <div class="advanced-setting-copy">
+                                    <label for="advanced-ltm-access-enabled">访问强化 <span class="advanced-setting-var">(ACCESS_REINFORCEMENT)</span></label>
+                                    <small class="advanced-risk-note">被对话检索反复召回的长期记忆会提高保留价值</small>
+                                </div>
+                                <div class="advanced-setting-control">
+                                    <em id="advanced-ltm-access-enabled-value">ON</em>
+                                    <label class="advanced-ios-switch" for="advanced-ltm-access-enabled" aria-label="访问强化">
+                                        <input id="advanced-ltm-access-enabled" data-advanced-setting="ltmAccessReinforcementEnabled" type="checkbox" value="1" checked>
+                                        <span class="advanced-ios-switch__track" aria-hidden="true"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="advanced-setting-row">
+                                <div class="advanced-setting-copy">
+                                    <label for="advanced-ltm-access-max-importance">访问强化重要性上限 <span class="advanced-setting-var">(ACCESS_MAX_IMPORTANCE)</span></label>
+                                    <small class="advanced-risk-note">限制普通召回把低价值记忆无限抬高</small>
+                                </div>
+                                <div class="advanced-setting-control">
+                                    <em id="advanced-ltm-access-max-importance-value">8.0</em>
+                                    <input id="advanced-ltm-access-max-importance" data-advanced-setting="ltmAccessMaxImportance" type="number" min="1" max="10" step="0.1" value="8">
+                                </div>
+                            </div>
+                            <div class="advanced-setting-row">
+                                <div class="advanced-setting-copy">
+                                    <label for="advanced-ltm-duplicate-enabled">重复内容强化 <span class="advanced-setting-var">(DUPLICATE_REINFORCEMENT)</span></label>
+                                    <small class="advanced-risk-note">新记忆与旧记忆高度相似时强化旧记忆，减少重复碎片</small>
+                                </div>
+                                <div class="advanced-setting-control">
+                                    <em id="advanced-ltm-duplicate-enabled-value">ON</em>
+                                    <label class="advanced-ios-switch" for="advanced-ltm-duplicate-enabled" aria-label="重复内容强化">
+                                        <input id="advanced-ltm-duplicate-enabled" data-advanced-setting="ltmDuplicateReinforcementEnabled" type="checkbox" value="1" checked>
+                                        <span class="advanced-ios-switch__track" aria-hidden="true"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="advanced-setting-row">
+                                <div class="advanced-setting-copy">
+                                    <label for="advanced-ltm-duplicate-threshold">重复判断相似度阈值 <span class="advanced-setting-var">(DUPLICATE_SIMILARITY)</span></label>
+                                    <small class="advanced-risk-note">越高越严格；过低可能把不同事件合并</small>
+                                </div>
+                                <div class="advanced-setting-control">
+                                    <em id="advanced-ltm-duplicate-threshold-value">62%</em>
+                                    <input id="advanced-ltm-duplicate-threshold" data-advanced-setting="ltmDuplicateSimilarityThreshold" type="range" min="0.35" max="0.9" step="0.01" value="0.62">
+                                </div>
+                            </div>
+                            <div class="advanced-setting-row">
+                                <div class="advanced-setting-copy">
+                                    <label for="advanced-ltm-duplicate-boost">重复强化重要性增益 <span class="advanced-setting-var">(DUPLICATE_IMPORTANCE_BOOST)</span></label>
+                                    <small class="advanced-risk-note">重复出现的偏好、关系和事件会获得更高保留价值</small>
+                                </div>
+                                <div class="advanced-setting-control">
+                                    <em id="advanced-ltm-duplicate-boost-value">+0.25</em>
+                                    <input id="advanced-ltm-duplicate-boost" data-advanced-setting="ltmDuplicateImportanceBoost" type="number" min="0" max="1" step="0.05" value="0.25">
+                                </div>
+                            </div>
+                            <div class="advanced-setting-row">
+                                <div class="advanced-setting-copy">
+                                    <label for="advanced-ltm-maintenance-interval">自动维护最小间隔 <span class="advanced-setting-var">(MAINTENANCE_INTERVAL_HOURS)</span></label>
+                                    <small class="advanced-risk-note">页面加载、保存记忆、导入存档或打开记忆节点时按间隔触发轻量清理</small>
+                                </div>
+                                <div class="advanced-setting-control">
+                                    <em id="advanced-ltm-maintenance-interval-value">24 h</em>
+                                    <input id="advanced-ltm-maintenance-interval" data-advanced-setting="ltmMaintenanceIntervalHours" type="number" min="1" max="168" step="1" value="24">
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </section>
 

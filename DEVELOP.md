@@ -727,6 +727,14 @@ localStorage key：`fritia_advanced_settings`
 - `roundtableFollowUpRate: 0.55`：圆桌密语自动接话概率，UI 范围 `0~1`，步进 `0.05`。
 - `roundtableMaxStoredMessages: 500`：圆桌密语最大消息存储数量，UI 范围 `50~3000`。
 - `kbChunkSize: 512`、`kbChunkOverlap: 50`、`kbCandidateLimit: 50`：知识库上传分块和 BM25 候选召回默认值。
+- 长期记忆高级设置项集中在“长期记忆”分组：
+  - `ltmAccessReinforcementEnabled: 1`：对话检索召回的长期记忆会记录访问并提升保留价值。
+  - `ltmAccessImportanceBoost: 0.08`、`ltmAccessMaxImportance: 8`：控制每次召回的重要性增益和上限。
+  - `ltmDuplicateReinforcementEnabled: 1`：写入新记忆时，对同 scope、同类型、同说话角色的相似旧记忆执行重复强化。
+  - `ltmDuplicateSimilarityThreshold: 0.62`、`ltmDuplicateImportanceBoost: 0.25`、`ltmDuplicateCandidateLimit: 80`：控制重复判断阈值、强化增益和纯前端候选扫描数量。
+  - `ltmMaintenanceIntervalHours: 24`：页面加载、保存长期记忆、导入存档或打开记忆节点时，按该最小间隔执行机会式维护。
+  - 高级设置 UI 中只展示访问强化开关、访问强化重要性上限、重复内容强化开关、重复相似度阈值、重复强化重要性增益和自动维护间隔；`ltmAccessImportanceBoost`、`ltmDuplicateCandidateLimit` 保留默认值、导入导出和 JS 修改接口，但暂不显示在高级设置页面。
+  - `ltmAccessReinforcementEnabled` 和 `ltmDuplicateReinforcementEnabled` 使用高级设置页专用 `.advanced-ios-switch` 自绘扁平开关，尺寸约为旧版开关的 80%，不复用圆桌密语开关样式。
 
 DeepSeek 亲密模式：`js/deepseek_intimate_mode.js`
 
@@ -1817,7 +1825,7 @@ Escape：
 ## 2026-06-26 长期记忆系统补充
 
 - `long_term_memory.js`
-  - 新增纯前端长期记忆系统，使用 `localStorage.fritia_long_term_memory` 保存 `{ version, extractorVersion, updatedAt, settings, memories, edges, deletedIds }`。
+  - 新增纯前端长期记忆系统，使用 `localStorage.fritia_long_term_memory` 保存 `{ version, extractorVersion, updatedAt, settings, memories, edges, deletedIds, lifecycle }`。
   - 默认 `settings.enabled=true`、`retentionDays=60`、`blockedKeywords=[]`、`includeIntimate=false`。
   - 私聊 scope 为 `private:<characterId>`；圆桌密语公共 scope 为 `public:roundtable`。私聊记忆只给对应 bot 检索，公共记忆可被所有 bot 检索。
   - 采集使用确定性规则，不调用 LLM，不使用 embedding，不执行任何模型输出代码。
@@ -1829,7 +1837,7 @@ Escape：
   - 每条 `edge` 保存 `sourceMemoryIds`；每条 `memory` 保存 `sourceMessageIds/source/scope/characterId/createdAt/updatedAt/speakerRole/speakerId/speakerName/addresseeId/addresseeName`。
   - 新采集会把一轮对话拆成 player / assistant(bot) / system episode 分别入档：玩家发言显示为“分析员在某场景中提到”，bot 发言显示为“角色在某场景中回应”，约会开场等合成事件显示为“系统事件”，避免把 bot 自己说的话错误包装成“分析员提到”。
   - `你/分析员/@对象` 的指代只用于人物关系边和有明确共同承载物的互动边，不用于替别人断言普通事实。例：玩家私聊说“最喜欢你了”生成“分析员 -> 喜欢 -> 当前 bot”；圆桌 bot 对 `@芙提雅` 说“谢谢你昨天的做饭教学”可生成“芙提雅 -> 做饭教学 -> 该 bot”。“你喜欢红茶”这类对对方的陈述或提问不生成事实边。
-  - 互动事实使用轻量事件节点承载，避免拆成不等价三元组。例：bot 说“昨天送了你一件礼物”会生成“bot -> 送出者 -> 事件:昨天bot赠送分析员”、“分析员 -> 接收者 -> 事件:昨天bot赠送分析员”、“事件 -> 物品 -> 礼物”，原文仍保存在文本文档记忆中。
+  - 互动事实使用轻量事件节点承载，避免拆成不等价三元组。长期记忆模块在创建事件节点时会自行读取 `localStorage.fritia_game_state.gameMinutes`，把“今天/昨天/明天/前天/后天/早上/晚上”等相对时间归一化为游戏内具体日期；例：bot 在 1 月 4 日说“昨天送了你一件礼物”会生成“bot -> 送出者 -> 事件:第1年1月3日bot赠送分析员”、“分析员 -> 接收者 -> 事件:第1年1月3日bot赠送分析员”、“事件 -> 时间 -> 第1年1月3日”、“事件 -> 物品 -> 礼物”，原文仍保存在文本文档记忆中。
   - 当 bot 用名字称呼对话对象时，该名字不作为事实边 head；例如“早上好，分析员记得好好记录我的心跳数据哦”只保留文本记忆，不生成“分析员/芙提雅 -> 记得 -> ...”这类错位事实边。
   - 昵称使用独立昵称边建模，并且业务边统一指向角色主节点。例：“最喜欢小琴诺了”生成“分析员 -> 喜欢 -> 琴诺”和“琴诺 -> 昵称 -> 小琴诺”；“小老师”同样作为“芙提雅 -> 昵称 -> 小老师”展示，搜索昵称时会等价召回角色主节点关系。
   - v11 增加本地中文 OIE 防误抽门控：参考 LTP/HanLP/APRCOIE 这类中文信息抽取系统的“分词/词性/依存后按 `SBV/VOB/ATT/POB/CMP` 等句法关系取论元”思路，但不引入模型文件、后端或 WASM 依赖。完整中文规则集依赖外部 NLP pipeline，不能在纯静态轻量约束下原样移植，因此本项目只保留无依赖门控：程度补语、动结/趋向补语、语气尾片段不能作为尾实体；同一轮玩家明确问“你喜欢我吗？”时，bot 的省略回答可以继承问句论元生成 `bot -> 喜欢/不喜欢 -> 分析员`，旧存档重建不凭单条 bot 回复猜上下文。
@@ -1837,6 +1845,9 @@ Escape：
   - 搜索结果中删除实体关系会级联删除该关系、其来源 memories、失去来源的 edges，并把删除 id 写入 `deletedIds`，导入旧存档时不会复活。
   - 新增 `deleteLongTermMemoryMemory(memoryId)` 与 `getOrphanMemories(store)`；档案窗口删除单条 memory 无需二次确认，会从所有 `edge.sourceMemoryIds` 中移除该 id，失去来源的 edge 同步删除并写入 `deletedIds`。
   - 导出字段为 `longTermMemory`；导入兼容 `longTermMemory` / `longTermMemories`，按 id 合并，坏记录跳过。
+  - 每条 `memory` 额外维护 `accessCount/lastAccessedAt/reinforcementCount/lastReinforcedAt`。对话检索命中的文本记忆，以及命中图谱边的 `sourceMemoryIds` 来源记忆，会按高级设置执行访问强化：更新时间、增加访问次数，并在上限内提高 `importance`。
+  - 新记忆写入时会按高级设置执行重复内容强化：在同 scope、同类型、同说话角色内扫描有限候选，使用现有 token/CJK gram 的 Jaccard 相似度判断重复；达到阈值时合并 `sourceMessageIds/tags`、增加 `reinforcementCount` 和重要性，不再额外写入一条重复原文。若重复记忆携带同一条图谱关系，则对应 edge 权重同步提升。
+  - `store.lifecycle` 保存 `lastMaintenanceAt/lastMaintenanceReason/maintenanceRuns/lastStats`。页面加载、保存长期记忆、导入存档和打开记忆节点窗口会按 `ltmMaintenanceIntervalHours` 触发机会式维护；导入后强制维护一次。当前维护仍沿用 `pruneStore()` 的保留天数与容量上限，不实现完整 TTL 状态机。
 
 - 对话注入
   - `dialogue.js`、`date_dialogue.js`、`bar_guest_system.js`、`roundtable_whispers.js` 在原知识库 RAG 后追加长期记忆 system 参考消息。

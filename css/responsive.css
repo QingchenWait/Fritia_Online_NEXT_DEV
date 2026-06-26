@@ -1481,6 +1481,10 @@
         padding-block: 4px;
         font-size: 16px;
     }
+    .advanced-ios-switch {
+        --switch-h: 28px;
+        --switch-w: 48px;
+    }
     .settings-foot-actions {
         display: grid;
         grid-template-columns: 1fr;
