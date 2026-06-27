@@ -1513,7 +1513,25 @@ export function requestDreamPaintingTextureUpload(furnitureId = '') {
         pendingDreamPaintingTextureTimer = null;
     }, 60000);
     showDreamScreenToast('选择图片后会替换画框中的内容。', 'ok');
-    document.getElementById('painting-upload')?.click();
+    const fileInput = document.getElementById('painting-upload');
+    if (!fileInput) return true;
+    if (controlsModule?.state?.isLocked) {
+        fileInput.dataset.resumeControlAfterPaintingUpload = '1';
+    } else {
+        delete fileInput.dataset.resumeControlAfterPaintingUpload;
+    }
+    controlsModule?.releaseControlMode?.({ resumeOnClose: false });
+    const openPicker = () => requestAnimationFrame(() => fileInput.click());
+    if (!document.pointerLockElement) {
+        openPicker();
+        return true;
+    }
+    const onPointerUnlock = () => {
+        if (document.pointerLockElement) return;
+        document.removeEventListener('pointerlockchange', onPointerUnlock);
+        openPicker();
+    };
+    document.addEventListener('pointerlockchange', onPointerUnlock);
     return true;
 }
 

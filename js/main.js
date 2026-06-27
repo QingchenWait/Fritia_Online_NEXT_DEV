@@ -156,6 +156,28 @@ let dreamDoorMesh;
 let dreamDoorInteractionMesh;
 let dreamDoorCollider;
 
+function requestPaintingUploadFileSelection() {
+    const fileInput = document.getElementById('painting-upload');
+    if (!fileInput) return;
+    if (controlsModule?.state?.isLocked) {
+        fileInput.dataset.resumeControlAfterPaintingUpload = '1';
+    } else {
+        delete fileInput.dataset.resumeControlAfterPaintingUpload;
+    }
+    controlsModule?.releaseControlMode?.({ resumeOnClose: false });
+    const openPicker = () => requestAnimationFrame(() => fileInput.click());
+    if (!document.pointerLockElement) {
+        openPicker();
+        return;
+    }
+    const onPointerUnlock = () => {
+        if (document.pointerLockElement) return;
+        document.removeEventListener('pointerlockchange', onPointerUnlock);
+        openPicker();
+    };
+    document.addEventListener('pointerlockchange', onPointerUnlock);
+}
+
 function setKeyPromptHTML(el, html, promptKey) {
     if (!el) return;
     if (promptKey) el.dataset.promptKey = promptKey;
@@ -707,12 +729,11 @@ async function init() {
         loadingScreen.style.display = 'none';
     }, 800);
 
-    document.getElementById('click-to-play').classList.remove('hidden');
-
     animate();
 
     const clickToPlay = document.getElementById('click-to-play');
-    const onFirstClick = () => {
+    const startInitialGameplay = () => {
+        if (startupInteractionStarted) return;
         clickToPlay.removeEventListener('click', onFirstClick);
         startupInteractionStarted = true;
         flushStartupAchievementToasts();
@@ -726,7 +747,14 @@ async function init() {
             }
         }, 300);
     };
+    const onFirstClick = () => startInitialGameplay();
     clickToPlay.addEventListener('click', onFirstClick);
+    if (controlsModule?.state?.isLocked || document.pointerLockElement === renderer.domElement) {
+        clickToPlay.classList.add('hidden');
+        startInitialGameplay();
+    } else {
+        clickToPlay.classList.remove('hidden');
+    }
 }
 
 function onKeyDown(e) {
@@ -887,7 +915,7 @@ function onKeyDown(e) {
             } else if (isLookingAtDoor()) {
                 tryEnterBarSceneWithAdmission();
             } else if (isLookingAtPainting()) {
-                document.getElementById('painting-upload').click();
+                requestPaintingUploadFileSelection();
             } else if (isLookingAtWardrobe()) {
                 openModelSelector();
             }
@@ -2053,6 +2081,9 @@ function initPainting() {
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        const shouldResumeControl = fileInput.dataset.resumeControlAfterPaintingUpload === '1';
+        delete fileInput.dataset.resumeControlAfterPaintingUpload;
+        if (shouldResumeControl) requestAnimationFrame(() => controlsModule?.forceEnterControlMode?.());
         if (consumeDreamPaintingTextureFile(file)) {
             fileInput.value = '';
             return;
