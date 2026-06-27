@@ -2098,6 +2098,7 @@ function isBadEntityCandidate(value) {
     if (/^[\p{P}\p{S}\s]+$/u.test(text)) return true;
     if (text.length < 2 && isCjkText(text)) return true;
     if (text.length > MAX_NODE_LABEL_LENGTH) return true;
+    if (/^的[\u3400-\u9fff]{1,12}$/.test(text)) return true;
     if (/\b(?:call me|remember|please)\b/i.test(text)) return true;
     if (/^(?:i|we)\s+(?:like|love|prefer|want)\b/i.test(text)) return true;
     if (/^(?:me|my|name)\s+[a-z0-9_-]+$/i.test(text)) return true;
