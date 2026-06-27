@@ -35,6 +35,7 @@ const BAR_GUEST_SPAWN_AREA = {
 const BAR_GUEST_SPAWN_RADIUS = 0.35;
 const BAR_GUEST_SPAWN_HEIGHT = 1.5;
 const BAR_GUEST_SPAWN_FOOT_OFFSET = 0.04;
+const BAR_GUEST_WAYPOINT_SLOT_SPACING = 0.72;
 const BAR_GUEST_SPAWN_FALLBACKS = [
     { x: -1.6, z: 47.0 },
     { x: 1.6, z: 47.2 },
@@ -764,6 +765,75 @@ function isSpawnPointClear(x, z) {
     return true;
 }
 
+function getNextGuestWaypointSlot() {
+    const used = new Set();
+    for (const runtime of state.runtimes.values()) {
+        if (runtime?.card?.id === CHERNO_CARD_ID) continue;
+        if (Number.isInteger(runtime?.waypointSlot)) used.add(runtime.waypointSlot);
+    }
+    for (let slot = 0; slot < 64; slot += 1) {
+        if (!used.has(slot)) return slot;
+    }
+    return used.size;
+}
+
+function clampBarWaypointPosition(pos, radius = BAR_GUEST_SPAWN_RADIUS) {
+    const bounds = state.getBarBounds?.();
+    if (!bounds?.min || !bounds?.max) return pos;
+    pos.x = Math.max(bounds.min.x + radius, Math.min(bounds.max.x - radius, pos.x));
+    pos.z = Math.max(bounds.min.z + radius, Math.min(bounds.max.z - radius, pos.z));
+    return pos;
+}
+
+function getGuestWaypointOffset(slot = 0) {
+    const safeSlot = Math.max(0, Number.isFinite(slot) ? slot : 0);
+    const radius = BAR_GUEST_WAYPOINT_SLOT_SPACING * (1 + Math.floor(safeSlot / 8) * 0.55);
+    const angle = safeSlot * 2.399963229728653;
+    return {
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius
+    };
+}
+
+function toWaypointPosition(pos) {
+    return pos?.clone ? pos.clone() : new THREE.Vector3(Number(pos?.x) || 0, Number(pos?.y) || 0, Number(pos?.z) || 0);
+}
+
+function findGuestWaypointPosition(origin, slot = 0) {
+    const base = toWaypointPosition(origin);
+    const offset = getGuestWaypointOffset(slot);
+    base.x += offset.x;
+    base.z += offset.z;
+    return clampBarWaypointPosition(base);
+}
+
+function ensureGuestWaypointSet(runtime) {
+    const cd = runtime?.cd;
+    if (!cd || runtime?.card?.id === CHERNO_CARD_ID) return;
+    if (!Number.isInteger(runtime.waypointSlot)) runtime.waypointSlot = getNextGuestWaypointSlot();
+    const baseWaypoints = state.getBarWaypoints?.() || [];
+    if (
+        runtime.waypointSource === baseWaypoints
+        && runtime.waypoints
+        && runtime.waypointSetSlot === runtime.waypointSlot
+    ) {
+        cd.waypoints = runtime.waypoints;
+        return;
+    }
+    runtime.waypointSource = baseWaypoints;
+    runtime.waypointSetSlot = runtime.waypointSlot;
+    runtime.waypoints = baseWaypoints.map((waypoint) => {
+        const name = waypoint?.name || 'bar_waypoint';
+        return {
+            ...waypoint,
+            baseName: waypoint?.baseName || name,
+            name: `${name}__guest_slot_${runtime.waypointSlot}`,
+            position: findGuestWaypointPosition(waypoint?.position, runtime.waypointSlot)
+        };
+    });
+    cd.waypoints = runtime.waypoints;
+}
+
 function getSpawnPose(index = 0) {
     for (let attempt = 0; attempt < 24; attempt += 1) {
         const x = BAR_GUEST_SPAWN_AREA.minX + Math.random() * (BAR_GUEST_SPAWN_AREA.maxX - BAR_GUEST_SPAWN_AREA.minX);
@@ -942,6 +1012,7 @@ async function loadGuest(card) {
         existing.cd.root.rotation.y = pose.rotationY;
         existing.cd.faceDirection = pose.rotationY;
         existing.cd.root.visible = true;
+        ensureGuestWaypointSet(existing);
         return existing;
     }
     const source = await resolveModelSource(card);
@@ -981,13 +1052,19 @@ async function loadGuestFromResolvedSource(card, modelUrl, prompt, sourceOptions
     cd.faceDirection = pose.rotationY;
     cd.root.visible = true;
 
-    return {
+    const runtime = {
         card,
         cd,
         modelObjectUrl: sourceOptions.ownsModelUrl ? modelUrl : '',
         resourceObjectUrls: resourceUrls.map(item => item.url).filter(Boolean),
-        prompt
+        prompt,
+        waypointSlot: getNextGuestWaypointSlot(),
+        waypointSource: null,
+        waypointSetSlot: -1,
+        waypoints: null
     };
+    ensureGuestWaypointSet(runtime);
+    return runtime;
 }
 
 async function loadChernoGuest() {
