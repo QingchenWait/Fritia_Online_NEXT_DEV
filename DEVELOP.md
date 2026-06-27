@@ -457,7 +457,7 @@ LLM JSON 协议：
 - 管理 `#bar-guest-panel` 发起邀请浮层；看向 `BarInviteInvisibleBox` 时显示 `按 E 邀请其他人入场`。
 - 内置候选角色 `芬妮`：PMX 位于 `src/_char_card/fenny/芬妮-澄意 夕晖蜜约.pmx`，人格设定位于 `src/_char_card/fenny/char_fenny_prompt.txt`。
 - 特殊场景角色 `琴诺`：PMX 与贴图位于 `src/_char_card/Cherno/`，人格设定位于 `src/_char_card/Cherno/char_cherno_prompt.txt`；每次进入酒吧都会自动加载，固定在 `X=7.2, Y=0.668, Z=42.01`，不进入候选列表、不写入访客存档、不参与随机移动。
-- 自定义角色通过本地 PMX 文件、同目录贴图/材质资源和人格设定文档导入；PMX 上传后在浮层中显示临时预览，读取期间显示圆形加载动画。浏览器无法仅凭单个本地文件授权枚举其目录；实现会扫描 PMX 内贴图文件名，并从用户同次选择的文件中自动匹配需要的贴图资源。
+- 自定义角色通过本地 PMX 文件、同目录或子目录贴图/材质资源和人格设定文档导入；PMX 上传后在浮层中显示临时预览，读取期间显示圆形加载动画。`#bar-guest-pmx-file` 支持多选和目录选择，浏览器无法仅凭单个本地文件授权枚举其目录，因此应一次选择 PMX 资源包；实现会扫描 PMX 内贴图相对路径，并从用户同次选择的文件中自动匹配需要的贴图资源。保存自定义访客时，`assetPaths` 会保留 `tex/`、`Sphere/`、`Toon/` 等子目录结构，加载时 `LoadingManager` 会归一化 blob/URL 编码路径，并同时按完整相对路径、尾部目录路径和文件名兜底匹配。
 - 新角色运行时通过 `character.js#loadCharacterFromModel()` 复用芙提雅的缩放、行走、寻路和姿态逻辑，但角色数据、人格 prompt、对话配色和生命周期独立。
 - 访客重新进入酒吧时会在地图中部 `BAR_GUEST_SPAWN_AREA` 内随机出生；初始 Y 轴由出生点脚下 walkable 碰撞盒高度动态计算，不使用固定 Y 偏移，也不改动角色移动时的 Y 轴逻辑。
 - 访客只在 `currentPlayerRoomId === "bar"` 时加载、更新和互动；离开酒吧时卸载运行时资源。未保存的临时访客不会再次加载，已保存的访客下次进入酒吧自动加载。

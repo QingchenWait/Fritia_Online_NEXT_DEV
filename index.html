@@ -176,17 +176,17 @@
                         <div id="bar-guest-preview" class="bar-guest-preview"><span>PMX</span></div>
                         <div>
                             <div class="otome-section-label">新角色配置</div>
-                            <p class="bar-guest-copy">上传 PMX 模型、贴图与人格设定，即可邀请入场。点击 [保存自定义角色] 可长期留场。</p>
+                            <p class="bar-guest-copy">选择包含 "PMX 模型+贴图" 的完整文件夹，并上传人格设定，即可邀请入场。点击 [保存自定义角色] 可长期留场。</p>
                         </div>
                     </div>
-                    <input type="file" id="bar-guest-pmx-file" accept=".pmx,image/*,.spa,.sph,.toon,.bmp" multiple hidden>
+                    <input type="file" id="bar-guest-pmx-file" accept=".pmx,image/*,.spa,.sph,.toon,.bmp" multiple webkitdirectory directory hidden>
                     <input type="file" id="bar-guest-prompt-file" accept=".txt,.md,text/plain" hidden>
                     <label class="otome-field-label" for="bar-guest-name">角色名称</label>
                     <input id="bar-guest-name" type="text" maxlength="24" placeholder="输入角色名称">
                     <div class="bar-guest-file-grid">
                         <button id="bar-guest-pmx-pick" class="bar-guest-file-card" type="button">
                             <span class="dance-file-card__kicker">PMX MODEL</span>
-                            <span class="dance-file-card__title">导入 PMX 与贴图</span>
+                            <span class="dance-file-card__title">导入模型文件夹 (PMX+贴图)</span>
                             <span id="bar-guest-pmx-name" class="dance-file-card__meta">未选择 PMX</span>
                         </button>
                         <button id="bar-guest-prompt-pick" class="bar-guest-file-card" type="button">

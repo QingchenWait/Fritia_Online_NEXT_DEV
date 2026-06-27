@@ -60,6 +60,7 @@ const state = {
         name: '',
         pmxFile: null,
         resourceFiles: [],
+        packageRoot: '',
         promptFile: null,
         promptText: '',
         previewUrl: '',
@@ -160,14 +161,84 @@ function normalizeAssetFileName(name) {
     return sanitizeName(name, 'asset.bin');
 }
 
+function normalizeResourcePath(path) {
+    let value = String(path || '').replace(/\\/g, '/');
+    try {
+        value = decodeURIComponent(value);
+    } catch {}
+    value = value.replace(/^blob:[^/]+\/+/i, '');
+    const assetRootIndex = value.lastIndexOf(`${USER_ASSET_ROOT}/`);
+    if (assetRootIndex >= 0) value = value.slice(assetRootIndex);
+    value = value
+        .replace(/^https?:\/\/[^/]+\//i, '')
+        .replace(/^file:\/\/\/?/i, '')
+        .replace(/^\.?\//, '')
+        .split('/')
+        .filter(part => part && part !== '.' && part !== '..')
+        .join('/');
+    return value;
+}
+
+function normalizeAssetRelativePath(path, fallback = 'asset.bin') {
+    const normalized = normalizeResourcePath(path);
+    const parts = normalized
+        .split('/')
+        .map(part => normalizeAssetFileName(part))
+        .filter(Boolean);
+    return parts.join('/') || normalizeAssetFileName(fallback);
+}
+
 function assetBaseName(path) {
-    return String(path || '').replace(/\\/g, '/').split('/').pop() || '';
+    return normalizeResourcePath(path).split('/').pop() || '';
 }
 
 function assetDirName(path) {
-    const normalized = String(path || '').replace(/\\/g, '/');
+    const normalized = normalizeResourcePath(path);
     const index = normalized.lastIndexOf('/');
     return index >= 0 ? normalized.slice(0, index) : '';
+}
+
+function getFileRelativePath(file) {
+    return normalizeResourcePath(file?.webkitRelativePath || file?.name || '');
+}
+
+function getPackageRootFromPmx(file) {
+    return assetDirName(getFileRelativePath(file));
+}
+
+function stripPackageRoot(path, packageRoot = '') {
+    const normalized = normalizeResourcePath(path);
+    const root = normalizeResourcePath(packageRoot);
+    if (root && normalized.toLowerCase().startsWith(`${root.toLowerCase()}/`)) {
+        return normalized.slice(root.length + 1);
+    }
+    return normalized;
+}
+
+function getUploadResourceName(file, packageRoot = '') {
+    return stripPackageRoot(getFileRelativePath(file), packageRoot) || assetBaseName(file?.name);
+}
+
+function getStoredAssetRelativeName(assetPath, modelDir = '') {
+    const normalized = normalizeResourcePath(assetPath);
+    const dir = normalizeResourcePath(modelDir);
+    if (dir && normalized.toLowerCase().startsWith(`${dir.toLowerCase()}/`)) {
+        return normalized.slice(dir.length + 1);
+    }
+    return assetBaseName(normalized);
+}
+
+function makeResourceLookupKeys(path) {
+    const normalized = normalizeResourcePath(path).toLowerCase();
+    if (!normalized) return [];
+    const parts = normalized.split('/').filter(Boolean);
+    const keys = new Set([normalized]);
+    if (parts.length > 1) {
+        keys.add(parts.slice(-2).join('/'));
+        keys.add(parts.slice(-3).join('/'));
+    }
+    keys.add(parts[parts.length - 1]);
+    return [...keys].filter(Boolean);
 }
 
 function getCardModelFileName(card) {
@@ -197,13 +268,16 @@ async function extractPmxTextureNames(file) {
             new TextDecoder('utf-8', { fatal: false })
         ];
         const textureNames = new Set();
-        const pattern = /(?:^|[^\w.\-/\\])([\w\u3000-\u9fffぁ-んァ-ン ._\-()[\]{}+@#$%&=~^]+?\.(?:png|jpe?g|bmp|tga|dds|gif|spa|sph|toon))(?:[^\w.\-/\\]|$)/ig;
+        const pattern = /(?:^|[^\w.\-/\\])([\w\u3000-\u9fffぁ-んァ-ン ._\-()[\]{}+@#$%&=~^/\\]+?\.(?:png|jpe?g|bmp|tga|dds|gif|spa|sph|toon))(?:[^\w.\-/\\]|$)/ig;
         for (const decoder of decoders) {
             const text = decoder.decode(bytes);
             let match;
             while ((match = pattern.exec(text))) {
-                const name = assetBaseName(match[1]).trim();
-                if (name) textureNames.add(name.toLowerCase());
+                const name = normalizeResourcePath(match[1]).trim();
+                if (name) {
+                    textureNames.add(name.toLowerCase());
+                    textureNames.add(assetBaseName(name).toLowerCase());
+                }
             }
         }
         return textureNames;
@@ -425,16 +499,25 @@ function disposePreviewObject(root) {
     });
 }
 
-function capturePmxPreview(file) {
+function capturePmxPreview(file, resourceFiles = [], packageRoot = '') {
     return new Promise((resolve, reject) => {
         const objectUrl = URL.createObjectURL(file);
-        const loader = new MMDLoader();
+        const resourceUrls = resourceFiles.map(item => ({
+            name: getUploadResourceName(item, packageRoot),
+            url: URL.createObjectURL(item)
+        }));
+        const manager = buildGuestResourceManager(resourceUrls);
+        const loader = manager ? new MMDLoader(manager) : new MMDLoader();
+        loader.setResourcePath?.('');
         let renderer = null;
         let meshRef = null;
         const cleanup = () => {
             if (meshRef) disposePreviewObject(meshRef);
             renderer?.dispose?.();
             URL.revokeObjectURL(objectUrl);
+            for (const item of resourceUrls) {
+                if (item.url) URL.revokeObjectURL(item.url);
+            }
         };
         loader.load(
             objectUrl,
@@ -490,6 +573,7 @@ function resetDraft() {
         name: '',
         pmxFile: null,
         resourceFiles: [],
+        packageRoot: '',
         promptFile: null,
         promptText: '',
         previewUrl: '',
@@ -510,18 +594,21 @@ async function handlePmxChanged(event) {
     const files = Array.from(event.target.files || []);
     const file = files.find(item => /\.pmx$/i.test(item.name)) || files[0] || null;
     const textureNames = await extractPmxTextureNames(file);
+    const packageRoot = getPackageRootFromPmx(file);
     const fallbackResourcePattern = /\.(?:png|jpe?g|bmp|tga|dds|gif|spa|sph|toon)$/i;
     const resourceFiles = files.filter(item => item !== file && (
         textureNames.has(item.name.toLowerCase())
         || textureNames.has(assetBaseName(item.webkitRelativePath || '').toLowerCase())
+        || textureNames.has(getUploadResourceName(item, packageRoot).toLowerCase())
         || (textureNames.size === 0 && fallbackResourcePattern.test(item.name))
     ));
     state.draft.pmxFile = file;
     state.draft.resourceFiles = resourceFiles;
+    state.draft.packageRoot = packageRoot;
     state.draft.name = els.nameInput?.value || state.draft.name;
     if (els.pmxName) els.pmxName.textContent = file ? file.name : '未选择 PMX';
     if (els.pmxName) els.pmxName.title = resourceFiles.length > 0
-        ? `${file?.name || ''}\n已自动匹配贴图：\n${resourceFiles.map(item => item.name).join('\n')}`
+        ? `${file?.name || ''}\n已自动匹配贴图：\n${resourceFiles.map(item => getUploadResourceName(item, packageRoot)).join('\n')}`
         : (file?.name || '');
     if (file) setStatus(resourceFiles.length > 0
         ? `已选择 PMX，并自动匹配 ${resourceFiles.length} 个贴图资源。`
@@ -537,7 +624,7 @@ async function handlePmxChanged(event) {
         return;
     }
     try {
-        const previewUrl = await capturePmxPreview(file);
+        const previewUrl = await capturePmxPreview(file, resourceFiles, packageRoot);
         if (state.draft.previewToken === previewToken && state.draft.pmxFile === file) {
             state.draft.previewUrl = previewUrl;
         }
@@ -581,7 +668,13 @@ async function saveDraftCard() {
     const id = makeGuestId();
     const modelPath = `${USER_ASSET_ROOT}/${id}/${normalizeAssetFileName(state.draft.pmxFile.name)}`;
     const promptPath = `${USER_ASSET_ROOT}/${id}/prompt.txt`;
-    const assetPaths = state.draft.resourceFiles.map(file => `${USER_ASSET_ROOT}/${id}/${normalizeAssetFileName(file.name)}`);
+    const assetPaths = state.draft.resourceFiles.map(file => {
+        const relativePath = normalizeAssetRelativePath(
+            getUploadResourceName(file, state.draft.packageRoot),
+            file.name
+        );
+        return `${USER_ASSET_ROOT}/${id}/${relativePath}`;
+    });
     setStatus('正在保存角色资源...', 'busy');
     try {
         await putAsset(modelPath, state.draft.pmxFile);
@@ -738,12 +831,21 @@ function buildGuestResourceManager(resourceUrls = []) {
     const manager = new THREE.LoadingManager();
     const byName = new Map();
     for (const item of resourceUrls) {
-        const key = assetBaseName(item.name).toLowerCase();
-        if (key && item.url) byName.set(key, item.url);
+        if (!item.url) continue;
+        const keys = [
+            ...makeResourceLookupKeys(item.name),
+            ...makeResourceLookupKeys(item.path)
+        ];
+        for (const key of keys) {
+            if (key && !byName.has(key)) byName.set(key, item.url);
+        }
     }
     manager.setURLModifier((url) => {
-        const key = assetBaseName(url).toLowerCase();
-        return byName.get(key) || url;
+        for (const key of makeResourceLookupKeys(url)) {
+            const mapped = byName.get(key);
+            if (mapped) return mapped;
+        }
+        return url;
     });
     return manager;
 }
@@ -754,11 +856,12 @@ async function resolveModelSource(card) {
     if (!blob) throw new Error(`缺少模型资源：${card.modelPath}`);
     const modelUrl = URL.createObjectURL(blob);
     const resourceUrls = [];
+    const modelDir = assetDirName(card.modelPath);
     for (const path of card.assetPaths || []) {
         const asset = await getAsset(path);
         if (asset) {
             resourceUrls.push({
-                name: assetBaseName(path),
+                name: getStoredAssetRelativeName(path, modelDir),
                 path,
                 url: URL.createObjectURL(asset)
             });
@@ -797,7 +900,7 @@ async function inviteSelectedCard() {
         try {
             modelUrl = URL.createObjectURL(state.draft.pmxFile);
             resourceUrls = state.draft.resourceFiles.map(file => ({
-                name: file.name,
+                name: getUploadResourceName(file, state.draft.packageRoot),
                 url: URL.createObjectURL(file)
             }));
             const runtime = await loadGuestFromResolvedSource(transientCard, modelUrl, state.draft.promptText, {
@@ -857,6 +960,7 @@ async function loadGuestFromResolvedSource(card, modelUrl, prompt, sourceOptions
         displayName: card.name
     };
     if (loadingManager) loadOptions.loadingManager = loadingManager;
+    if (sourceOptions.ownsModelUrl) loadOptions.resourcePath = '';
     const cd = await loadCharacterFromModel(
         state.scene,
         modelUrl,
